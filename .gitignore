@@ -1,0 +1,41 @@
+# --- Project-specific ---
+/Docs/
+/hra-env/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+.venv*/
+venv/
+.env
+.env.*
+*.sqlite3
+.ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+coverage.xml
+.coverage
+htmlcov/
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Secrets
+*.env
+key.env
+
+# Runtime / generated artifacts
+exports/*
+!exports/.gitkeep
+logs/*
+!logs/.gitkeep
+

@@ -1,0 +1,18 @@
+{
+  "seniority": "Intern",
+  "mission": "Prototype GenAI features and assist with evaluations.",
+  "responsibilities": [
+    "Build small demos with LLM APIs",
+    "Write evaluations and prompt libraries",
+    "Document findings and iterate quickly"
+  ],
+  "must_haves": [
+    "Python + basic data skills",
+    "Familiarity with LLM APIs / prompt engineering",
+    "Curiosity and fast learning"
+  ],
+  "nice_to_haves": [
+    "LangChain or LangGraph exposure",
+    "Streamlit or Flask for demos"
+  ]
+}

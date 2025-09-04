@@ -1,0 +1,18 @@
+{
+  "seniority": "Senior",
+  "mission": "Own core systems and ship v1 to early customers.",
+  "responsibilities": [
+    "Design, build, and operate core backend services",
+    "Establish engineering practices (reviews, CI/CD, observability)",
+    "Collaborate with product and AI teams to deliver customer value"
+  ],
+  "must_haves": [
+    "Strong coding in Python/Go/Node",
+    "Cloud & databases (AWS/GCP, Postgres)",
+    "Ownership mindset and startup pace"
+  ],
+  "nice_to_haves": [
+    "Kubernetes or container orchestration",
+    "Observability (OpenTelemetry, metrics, tracing)"
+  ]
+}
