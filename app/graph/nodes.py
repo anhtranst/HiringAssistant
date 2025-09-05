@@ -1,6 +1,6 @@
 import os
 import json
-from typing import List, Dict
+from typing import List, Dict, Tuple
 from graph.state import AppState, RoleSpec, JD
 from tools.search_stub import role_knowledge
 from tools.checklist import build_checklist
@@ -38,15 +38,14 @@ def node_profile(state: AppState) -> AppState:
     return state
 
 # --- Node 3: JD compose (template-first; optional LLM refine) ---
-def refine_text_via_llm(jd_dict: Dict) -> Dict:
-    # Optional: only run if API key is present
-    if not os.getenv("OPENAI_API_KEY"):
-        return jd_dict
+def refine_text_via_llm(jd_dict: Dict, use_llm: bool, remaining_calls: int) -> Tuple[Dict, int]:
+    """Return (refined_dict, remaining_calls). No-op if LLM off, no key, or no remaining calls."""
+    if not use_llm or not os.getenv("OPENAI_API_KEY") or remaining_calls <= 0:
+        return jd_dict, remaining_calls
 
     try:
         from openai import OpenAI
         client = OpenAI()
-
         system = (
             "You are an HR writing assistant. "
             "Return ONLY valid JSON with the same keys. "
@@ -58,30 +57,46 @@ def refine_text_via_llm(jd_dict: Dict) -> Dict:
                 {"role": "system", "content": system},
                 {"role": "user", "content": json.dumps(jd_dict)}
             ],
-            response_format={ "type": "json_object" }
+            response_format={"type": "json_object"}
         )
-        content = response.choices[0].message.content
-        return json.loads(content)
-    except Exception:
-        # fail safe: keep original
-        return jd_dict
+        refined = json.loads(response.choices[0].message.content)
+        usage = getattr(response, "usage", None)
+        return refined, remaining_calls - 1, {
+            "used": True,
+            "model": "gpt-4o-mini",
+            "prompt_tokens": getattr(usage, "prompt_tokens", None),
+            "completion_tokens": getattr(usage, "completion_tokens", None),
+            "total_tokens": getattr(usage, "total_tokens", None),
+        }
+    except Exception as e:
+        return jd_dict, remaining_calls, {"used": False, "error": str(e)}
 
 def node_jd(state: AppState) -> AppState:
+    use_llm = bool(state.global_constraints.get("use_llm"))
+    cap = int(state.global_constraints.get("llm_cap", 0))
+    used = int(state.global_constraints.get("llm_calls", 0))
+    remaining = max(0, cap - used)
+    llm_log = []
+
     for role in state.roles:
         facts = role_knowledge(role.title)
-
         jd = JD(
             title=role.title,
             mission=facts.get("mission", f"Contribute to building our v1 product as a {role.title}."),
             responsibilities=facts.get("responsibilities", []),
             requirements=role.must_haves or facts.get("must_haves", []),
             nice_to_haves=role.nice_to_haves or facts.get("nice_to_haves", []),
-            benefits=["Equity", "Flexible work", "Growth opportunities"]
+            benefits=["Equity", "Flexible work", "Growth opportunities"],
         )
+        refined_dict, remaining, meta = refine_text_via_llm(jd.model_dump(), use_llm, remaining)
+        meta["role"] = role.title
+        llm_log.append(meta)
+        state.jds[role.title] = JD(**refined_dict)
 
-        refined = refine_text_via_llm(jd.model_dump())
-        state.jds[role.title] = JD(**refined)
+    state.global_constraints["llm_calls"] = cap - remaining
+    state.global_constraints["llm_log"] = llm_log
     return state
+
 
 # --- Node 4: Checklist / plan + helpers ---
 def node_plan(state: AppState) -> AppState:

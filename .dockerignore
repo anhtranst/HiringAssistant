@@ -1,0 +1,21 @@
+# keep the image small and secrets out
+.git
+.gitignore
+Docs
+hra-env
+logs
+exports
+__pycache__/
+*.py[cod]
+
+# env / secrets
+.env
+.env.*
+*.env
+key.env
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode
+.idea

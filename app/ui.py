@@ -29,6 +29,11 @@ with colB:
     budget_usd = st.number_input("Budget (USD)", 0, 1_000_000, 8000, step=500)
 with colC:
     remote_policy = st.selectbox("Location policy", ["unspecified", "remote", "hybrid", "onsite"], index=0)
+    
+# LLM controls
+use_llm = st.toggle("Use LLM to polish JD text (optional)", value=False)
+llm_cap = st.number_input("Max LLM calls for this run", min_value=1, max_value=50, value=5, step=1)  
+st.caption(f"LLM refinement: {'ON' if use_llm and os.getenv('OPENAI_API_KEY') else 'OFF'}")  
 
 st.divider()
 
@@ -41,7 +46,14 @@ if st.button("Plan Hiring", type="primary"):
     graph = build_graph()
     state = AppState(
         user_prompt=user_prompt.strip(),
-        global_constraints={"timeline_weeks": timeline_weeks, "budget_usd": budget_usd, "location_policy": remote_policy}
+        global_constraints={
+            "timeline_weeks": int(timeline_weeks),
+            "budget_usd": int(budget_usd),
+            "location_policy": remote_policy,
+            "use_llm": bool(use_llm),
+            "llm_cap": int(llm_cap),
+            "llm_calls": 0,   # start-of-run counter
+        },
     )
 
     # run graph
@@ -96,6 +108,17 @@ else:
         st.json(_get(state, "inclusive_warnings", []) or [])
         st.subheader("Example Outreach Emails")
         st.json(_get(state, "emails", {}) or {})
+
+        st.subheader("LLM usage (this run)")
+        gc = _get(state, "global_constraints", {}) or {}
+        st.json({
+            "toggle": gc.get("use_llm"),
+            "key_loaded": bool(os.getenv("OPENAI_API_KEY")),
+            "calls_used": gc.get("llm_calls", 0),
+            "cap": gc.get("llm_cap", 0),
+            "log": gc.get("llm_log", []),
+        })
+
 
     with t4:
         # Safe access (works for AppState or dict)

@@ -31,9 +31,12 @@ Thumbs.db
 
 # Secrets
 *.env
+.env
+.env.*
 key.env
+!*.env.example
 
-# Runtime / generated artifacts
+# Generated
 exports/*
 !exports/.gitkeep
 logs/*
