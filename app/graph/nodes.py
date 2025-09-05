@@ -38,10 +38,14 @@ def node_profile(state: AppState) -> AppState:
     return state
 
 # --- Node 3: JD compose (template-first; optional LLM refine) ---
-def refine_text_via_llm(jd_dict: Dict, use_llm: bool, remaining_calls: int) -> Tuple[Dict, int]:
-    """Return (refined_dict, remaining_calls). No-op if LLM off, no key, or no remaining calls."""
+def refine_text_via_llm(jd_dict: Dict, use_llm: bool, remaining_calls: int) -> Tuple[Dict, int, Dict]:
+    """
+    Returns a 3-tuple: (refined_dict, remaining_calls, meta)
+    meta includes keys like: used, model, prompt_tokens, completion_tokens, total_tokens, error, reason
+    """
+    # No-op path: LLM disabled or no key or no remaining calls
     if not use_llm or not os.getenv("OPENAI_API_KEY") or remaining_calls <= 0:
-        return jd_dict, remaining_calls
+        return jd_dict, remaining_calls, {"used": False, "reason": "disabled_or_no_key_or_cap"}
 
     try:
         from openai import OpenAI
@@ -61,14 +65,16 @@ def refine_text_via_llm(jd_dict: Dict, use_llm: bool, remaining_calls: int) -> T
         )
         refined = json.loads(response.choices[0].message.content)
         usage = getattr(response, "usage", None)
-        return refined, remaining_calls - 1, {
+        meta = {
             "used": True,
             "model": "gpt-4o-mini",
             "prompt_tokens": getattr(usage, "prompt_tokens", None),
             "completion_tokens": getattr(usage, "completion_tokens", None),
             "total_tokens": getattr(usage, "total_tokens", None),
-        }
+        }        
+        return refined, remaining_calls - 1, meta
     except Exception as e:
+        # Fail safe: return original dict, keep remaining_calls, include error message
         return jd_dict, remaining_calls, {"used": False, "error": str(e)}
 
 def node_jd(state: AppState) -> AppState:
