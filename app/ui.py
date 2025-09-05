@@ -15,6 +15,7 @@ from tools.exporters import checklist_json_to_docx
 
 # Role creation / KB refresh for the UI resolver
 from tools.role_matcher import save_custom_role, load_kb
+from tools.search_stub import load_template_for_role
 
 load_dotenv()
 
@@ -123,11 +124,8 @@ else:
     t1, t2, t3, t4 = st.tabs(["🎯 Roles & JDs", "✅ Checklist / Plan", "🧰 Tools (Email/Inclusive)", "📤 Export"])
 
     with t1:
-        st.subheader("Parsed Roles")
+        st.subheader("Roles")
         roles = _get(state, "roles", []) or []
-        # Show the raw roles for debugging/trust
-        roles_out = [r.model_dump() if hasattr(r, "model_dump") else r for r in roles]
-        st.json(roles_out)
 
         # ---- Resolve unmatched roles (suggest/unknown) ----
         unresolved = [(i, r) for i, r in enumerate(roles) if field(r, "status") in ("suggest", "unknown")]
@@ -139,7 +137,7 @@ else:
                 status = field(r, "status", "unknown")
                 suggestions = field(r, "suggestions", []) or []
 
-                with st.expander(f"Resolve: {title}  ·  status={status}"):
+                with st.expander(f"Resolve: {title}  ·  status={status}", expanded=True):
                     # A) choose from suggestions (if any)
                     if suggestions:
                         options = {f"{s['title']} (score {s['score']:.2f})": s for s in suggestions}
@@ -150,8 +148,7 @@ else:
                             key=f"suggest_choice_{idx}"
                         )
                     else:
-                        options = {}
-                        choice_label = None
+                        options, choice_label = {}, None
                         st.info("No suggestions found for this phrase.")
 
                     # B) or create a new role
@@ -166,31 +163,24 @@ else:
                         loop_default = ["Screen", "Tech Deep-Dive", "System Design", "Founder Chat", "References"]
                         submit_new = st.form_submit_button("Create new role")
 
-                    # Actions
                     c1, c2 = st.columns(2)
-
-                    # Use selected suggestion
                     with c1:
                         if suggestions and st.button("Use selected suggestion", key=f"use_suggest_{idx}"):
                             chosen = options[choice_label]
-                            # Patch RoleSpec (Pydantic or dict) in place
+                            # Patch RoleSpec in place
                             set_field(r, "role_id", chosen["role_id"])
                             set_field(r, "title", chosen["title"])
                             set_field(r, "status", "match")
                             set_field(r, "confidence", float(chosen["score"]))
-                            # find file via KB reload
                             kb = load_kb()
                             rec = next((k for k in kb if k["id"] == chosen["role_id"]), None)
                             set_field(r, "file", rec["file"] if rec else None)
                             set_field(r, "suggestions", [])
-
-                            # Re-run the graph now that roles are resolved
+                            # re-run
                             graph = build_graph()
-                            new_state = graph.invoke(state)
-                            st.session_state["last_state"] = new_state
+                            st.session_state["last_state"] = graph.invoke(state)
                             st.rerun()
 
-                    # Create new role
                     with c2:
                         if submit_new:
                             payload = {
@@ -206,28 +196,88 @@ else:
                                 "interview_loop": loop_default,
                                 "sourcing_tags": []
                             }
-                            saved = save_custom_role(payload)   # writes JSON + updates roles_kb_custom.json
-                            _ = load_kb()                       # refresh disk→memory cache for future runs
-
-                            # Patch RoleSpec in place
+                            saved = save_custom_role(payload)
+                            _ = load_kb()  # warm cache for later runs
                             set_field(r, "role_id", saved["id"])
                             set_field(r, "title", saved["title"])
                             set_field(r, "file", saved["file"])
                             set_field(r, "status", "match")
                             set_field(r, "confidence", 1.0)
                             set_field(r, "suggestions", [])
-
-                            # Re-run the graph with resolved role
                             graph = build_graph()
-                            new_state = graph.invoke(state)
-                            st.session_state["last_state"] = new_state
+                            st.session_state["last_state"] = graph.invoke(state)
                             st.success(f"Created and applied custom role: {saved['title']}")
                             st.rerun()
-    
-            # Prevent JDs/Plan/Emails from rendering until roles are resolved
+
+            # Block downstream sections until all roles are finalized
             st.info("Once you confirm all roles, the Job Descriptions, Plan, and Outreach Emails will be generated.")
             st.stop()
-            
+
+        # ---- Matched roles: editable details ----
+        matched_roles = [r for r in roles if field(r, "status") == "match"]
+        if not matched_roles:
+            st.info("No finalized roles yet.")
+        else:
+            for i, r in enumerate(matched_roles):
+                title = field(r, "title", "Untitled role")
+                conf = field(r, "confidence", 1.0)
+                st.markdown(f"### {title}  ·  ✅ Matched  · score {conf:.2f}")
+
+                tpl = load_template_for_role(r)
+                must = field(r, "must_haves") or tpl.get("must_haves") or tpl.get("skills", {}).get("must", [])
+                nice = field(r, "nice_to_haves") or tpl.get("nice_to_haves") or tpl.get("skills", {}).get("nice", [])
+                seniority = field(r, "seniority") or tpl.get("seniority", "Mid")
+
+                with st.expander("Edit role details", expanded=True):
+                    new_title = st.text_input("Title", value=title, key=f"title_{i}")
+                    new_sen = st.selectbox(
+                        "Seniority",
+                        ["Intern", "Junior", "Mid", "Senior", "Staff", "Principal", "Lead"],
+                        index=["Intern", "Junior", "Mid", "Senior", "Staff", "Principal", "Lead"].index(seniority),
+                        key=f"sen_{i}"
+                    )
+                    must_s = st.text_area("Must-have skills (comma-separated)", value=", ".join(must), key=f"must_{i}")
+                    nice_s = st.text_area("Nice-to-have skills (comma-separated)", value=", ".join(nice), key=f"nice_{i}")
+
+                    colx, coly = st.columns(2)
+                    with colx:
+                        if st.button("Apply changes for this plan", key=f"apply_{i}"):
+                            set_field(r, "title", new_title.strip() or title)
+                            set_field(r, "seniority", new_sen)
+                            set_field(r, "must_haves", [s.strip() for s in must_s.split(",") if s.strip()])
+                            set_field(r, "nice_to_haves", [s.strip() for s in nice_s.split(",") if s.strip()])
+                            graph = build_graph()
+                            st.session_state["last_state"] = graph.invoke(state)
+                            st.success("Changes applied for this run.")
+                            st.rerun()
+
+                    with coly:
+                        save_it = st.checkbox("Also save as a reusable custom template", key=f"save_{i}", value=False)
+                        if save_it and st.button("Save as custom template", key=f"savebtn_{i}"):
+                            payload = {
+                                "title": new_title.strip() or title,
+                                "function": "Engineering",
+                                "seniority": new_sen,
+                                "aliases": [],
+                                "skills": {
+                                    "must": [s.strip() for s in must_s.split(",") if s.strip()],
+                                    "nice": [s.strip() for s in nice_s.split(",") if s.strip()],
+                                },
+                                "responsibilities": tpl.get("responsibilities", []),  # keep existing unless you extend UI
+                                "interview_loop": tpl.get("interview_loop", ["Screen","Tech Deep-Dive","System Design","Founder Chat","References"]),
+                                "sourcing_tags": tpl.get("sourcing_tags", [])
+                            }
+                            saved = save_custom_role(payload)
+                            set_field(r, "role_id", saved["id"])
+                            set_field(r, "title", saved["title"])
+                            set_field(r, "file", saved["file"])
+                            set_field(r, "status", "match")
+                            set_field(r, "confidence", 1.0)
+                            graph = build_graph()
+                            st.session_state["last_state"] = graph.invoke(state)
+                            st.success(f"Saved as custom template: {saved['title']}")
+                            st.rerun()
+
         # ----- JDs preview -----
         st.subheader("Job Descriptions")
         jds = _get(state, "jds", {})
@@ -235,6 +285,7 @@ else:
         for title, jd in jds_out.items():
             st.markdown(f"### {title}")
             st.json(jd)
+
 
     with t2:
         st.subheader("Checklist (Markdown)")
