@@ -42,6 +42,7 @@ Plan a startup hiring process from a single prompt.
 
 ## Project Structure
 
+```
 HiringAssistant/
 ├─ app/
 │  ├─ ui.py                       # Streamlit UI (entry point)
@@ -70,11 +71,14 @@ HiringAssistant/
 ├─ .dockerignore
 ├─ requirements.txt
 └─ .gitignore
+```
+
 
 ---
 
 ## How it flows (LangGraph)
 
+```
 user prompt
    ↓
 [Intake]  → parse roles (simple keyword parser)
@@ -86,6 +90,8 @@ user prompt
 [Plan]    → checklist + interview loop (MD/JSON) + inclusivity + emails
    ↓
 UI tabs   → view/export MD/JSON/DOCX + LLM usage log
+```
+
 
 ---
 
