@@ -2,40 +2,80 @@ import os
 import json
 from typing import List, Dict, Tuple
 from graph.state import AppState, RoleSpec, JD
-from tools.search_stub import role_knowledge
+
+# Matcher + KB helpers (deterministic; no LLM)
+from tools.role_matcher import load_kb, extract_candidate_phrases, match_one
+
+# Template loader now works by file path provided on RoleSpec.file
+from tools.search_stub import load_template_for_role
+
+# Downstream utilities
 from tools.checklist import build_checklist
 from tools.email_writer import outreach_templates
 from tools.inclusive_check import check_inclusive_language
 from tools.simulator import quick_success_estimate
 
+# Load KB once at import; if you support adding roles at runtime,
+# you can refresh this by calling load_kb() again after saving a role.
+KB = load_kb()
+
+
 # --- Node 1: intake / simple parse ---
 def node_intake(state: AppState) -> AppState:
-    # Very simple split by common delimiters; robust parsing could be added later
-    prompt = state.user_prompt.lower()
-    titles: List[str] = []
+    """
+    Parse the user's free-text prompt into one or more RoleSpec entries by
+    matching phrases against our role KB (titles + aliases). If the UI has
+    already resolved roles (e.g., user picked a suggestion or created a
+    new custom role), we skip parsing and keep those roles intact.
+    """
+    # --- Early exit: if roles already resolved in UI, skip parsing ---
+    if state.roles:   # roles already chosen/resolved in UI
+        return state
 
-    candidates = ["founding engineer", "genai intern", "backend engineer", "data scientist", "frontend engineer"]
-    for t in candidates:
-        if t in prompt:
-            titles.append(t)
+    prompt = state.user_prompt
+    phrases = extract_candidate_phrases(prompt)
+    results: List[RoleSpec] = []
 
-    # Fallback: if none recognized, assume one generic role "founding engineer"
-    if not titles:
-        titles = ["founding engineer"]
+    for ph in phrases:
+        m = match_one(ph, KB, fuzzy_threshold=88)
+        results.append(RoleSpec(
+            role_id=m.role_id,
+            title=m.title,
+            status=m.status,
+            confidence=m.confidence,
+            file=m.file,
+            suggestions=m.suggestions
+        ))
 
-    state.roles = [RoleSpec(title=title.title()) for title in titles]
+    # If absolutely nothing matched, add a safe default so downstream won't crash
+    if not any(r.status == "match" for r in results):
+        # Try to find founding engineer in KB
+        fallback = next((k for k in KB if k["id"] == "founding_engineer"), None)
+        if fallback:
+            results.append(RoleSpec(
+                role_id=fallback["id"],
+                title=fallback["title"],
+                status="match",
+                confidence=1.0,
+                file=fallback["file"],
+                suggestions=[]
+            ))
+
+    state.roles = results
     return state
+
 
 # --- Node 2: role profiler ---
 def node_profile(state: AppState) -> AppState:
-    for idx, role in enumerate(state.roles):
-        facts = role_knowledge(role.title)
-        role.must_haves = facts.get("must_haves", [])
-        role.nice_to_haves = facts.get("nice_to_haves", [])
-        role.seniority = facts.get("seniority", role.seniority)
+    # Only enrich roles that are finalized (status == "match")
+    for idx, role in enumerate([r for r in state.roles if r.status == "match"]):
+        tpl = load_template_for_role(role)
+        role.must_haves = tpl.get("must_haves", []) or tpl.get("skills", {}).get("must", [])
+        role.nice_to_haves = tpl.get("nice_to_haves", []) or tpl.get("skills", {}).get("nice", [])
+        role.seniority = role.seniority or tpl.get("seniority")
         role.geo = role.geo or state.global_constraints.get("geo")
-        state.roles[idx] = role
     return state
+
 
 # --- Node 3: JD compose (template-first; optional LLM refine) ---
 def refine_text_via_llm(jd_dict: Dict, use_llm: bool, remaining_calls: int) -> Tuple[Dict, int, Dict]:
@@ -71,29 +111,48 @@ def refine_text_via_llm(jd_dict: Dict, use_llm: bool, remaining_calls: int) -> T
             "prompt_tokens": getattr(usage, "prompt_tokens", None),
             "completion_tokens": getattr(usage, "completion_tokens", None),
             "total_tokens": getattr(usage, "total_tokens", None),
-        }        
+        }
         return refined, remaining_calls - 1, meta
     except Exception as e:
         # Fail safe: return original dict, keep remaining_calls, include error message
         return jd_dict, remaining_calls, {"used": False, "error": str(e)}
 
+
 def node_jd(state: AppState) -> AppState:
+    """
+    Build JD objects per role using the template facts. Optionally run a cheap
+    LLM pass to polish the text (strict JSON in/out).
+    """
     use_llm = bool(state.global_constraints.get("use_llm"))
     cap = int(state.global_constraints.get("llm_cap", 0))
     used = int(state.global_constraints.get("llm_calls", 0))
     remaining = max(0, cap - used)
     llm_log = []
 
-    for role in state.roles:
-        facts = role_knowledge(role.title)
+    # Reset JDs each run to avoid leftovers from previous resolutions
+    state.jds = {}
+
+    matched_roles = [r for r in state.roles if r.status == "match"]
+    if not matched_roles:
+        # Nothing finalized yet → nothing to do
+        state.global_constraints["llm_calls"] = cap - remaining
+        state.global_constraints["llm_log"] = llm_log
+        return state
+
+    for role in matched_roles:
+        tpl = load_template_for_role(role)
+        must = role.must_haves or tpl.get("must_haves", []) or tpl.get("skills", {}).get("must", [])
+        nice = role.nice_to_haves or tpl.get("nice_to_haves", []) or tpl.get("skills", {}).get("nice", [])
+
         jd = JD(
             title=role.title,
-            mission=facts.get("mission", f"Contribute to building our v1 product as a {role.title}."),
-            responsibilities=facts.get("responsibilities", []),
-            requirements=role.must_haves or facts.get("must_haves", []),
-            nice_to_haves=role.nice_to_haves or facts.get("nice_to_haves", []),
-            benefits=["Equity", "Flexible work", "Growth opportunities"],
+            mission=tpl.get("mission", f"Contribute to building our v1 product as a {role.title}."),
+            responsibilities=tpl.get("responsibilities", []),
+            requirements=must,
+            nice_to_haves=nice,
+            benefits=tpl.get("benefits", ["Equity", "Flexible work", "Growth opportunities"]),
         )
+
         refined_dict, remaining, meta = refine_text_via_llm(jd.model_dump(), use_llm, remaining)
         meta["role"] = role.title
         llm_log.append(meta)
@@ -106,16 +165,28 @@ def node_jd(state: AppState) -> AppState:
 
 # --- Node 4: Checklist / plan + helpers ---
 def node_plan(state: AppState) -> AppState:
-    md, js = build_checklist(state.roles, state.jds, state.global_constraints)
+    """
+    Produce the hiring checklist/plan artifacts and utility outputs for the UI.
+    """
+    matched_roles = [r for r in state.roles if r.status == "match"]
+    if not matched_roles or not state.jds:
+        # Clear outputs until roles are finalized
+        state.checklist_markdown = ""
+        state.checklist_json = {}
+        state.emails = {}
+        state.inclusive_warnings = []
+        _ = quick_success_estimate({})  # no-op
+        return state
+
+    md, js = build_checklist(matched_roles, state.jds, state.global_constraints)
     state.checklist_markdown = md
     state.checklist_json = js
 
-    # Extra utilities for the UI
+    # Only generate outreach emails for finalized JD titles
     state.emails = outreach_templates(list(state.jds.keys()))
+
     state.inclusive_warnings = check_inclusive_language("\n".join(
         [" ".join(jd.requirements + jd.responsibilities) for jd in state.jds.values()]
     ))
-
-    # quick probability estimate for fun (not shown yet in UI tabs)
     _ = quick_success_estimate(js)
     return state

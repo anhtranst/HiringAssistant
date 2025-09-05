@@ -42,54 +42,79 @@ Plan a startup hiring process from a single prompt.
 
 ## Project Structure
 
+
 ```
 HiringAssistant/
 ├─ app/
-│  ├─ ui.py                       # Streamlit UI (entry point)
+│  ├─ ui.py                              # Streamlit UI (resolve roles, show results)
 │  ├─ __init__.py
 │  ├─ graph/
 │  │  ├─ __init__.py
-│  │  ├─ state.py                 # Pydantic models (AppState, RoleSpec, JD)
-│  │  ├─ nodes.py                 # Graph steps: intake → profile → jd → plan
-│  │  └─ graph_builder.py         # LangGraph wiring
+│  │  ├─ state.py                        # AppState, RoleSpec, JD models
+│  │  ├─ nodes.py                        # intake → profile → jd → plan
+│  │  └─ graph_builder.py                 # LangGraph wiring
 │  └─ tools/
 │     ├─ __init__.py
-│     ├─ search_stub.py           # Loads role facts from /data/role_knowledge
-│     ├─ checklist.py             # Builds checklist + interview loop
-│     ├─ email_writer.py          # Outreach email templates
-│     ├─ inclusive_check.py       # Regex-based inclusive language linter
-│     ├─ simulator.py             # Placeholder success estimator
-│     ├─ analytics.py             # Tiny CSV logger (local)
-│     └─ exporters.py             # JSON → DOCX
+│     ├─ role_matcher.py                 # Extract phrases, match KB, save/load roles
+│     ├─ search_stub.py                  # load_role_template, load_template_for_role
+│     ├─ checklist.py                    # Build checklist + interview loop
+│     ├─ email_writer.py                 # Outreach email templates
+│     ├─ inclusive_check.py              # Inclusive language linter
+│     ├─ simulator.py                    # Success estimator
+│     ├─ analytics.py                    # Simple CSV logger
+│     └─ exporters.py                    # Export JSON → DOCX
 ├─ data/
-│  └─ role_knowledge/
-│     ├─ founding_engineer.json
-│     └─ genai_intern.json
-├─ exports/                       # (ignored) generated files
-├─ logs/                          # (ignored) usage logs
+│  ├─ roles_kb.json                      # Curated role index
+│  ├─ roles_kb_custom.json               # Custom role index (user-created)
+│  ├─ role_knowledge/                    # Curated templates
+│  │  ├─ founding_engineer.json
+│  │  └─ genai_intern.json
+│  └─ role_knowledge_custom/             # Custom templates (generated at runtime)
+├─ exports/                              # (ignored) generated files
+├─ logs/                                 # (ignored) usage logs
 ├─ Dockerfile
 ├─ .dockerignore
 ├─ requirements.txt
 └─ .gitignore
-```
 
+```
 
 ---
 
 ## How it flows (LangGraph)
 
 ```
-user prompt
+User prompt
    ↓
-[Intake]  → parse roles (simple keyword parser)
+[Intake v2]
+   - Extract candidate phrases
+   - Match against roles_kb.json (+ roles_kb_custom.json)
+   - Produce RoleSpec(status="match"|"suggest"|"unknown")
    ↓
-[Profile] → enrich with must-haves / nice-to-haves from /data templates
+[UI Resolver]
+   - If suggest/unknown: show suggestions OR create a new role
+   - Save custom role → role_knowledge_custom/ + roles_kb_custom.json
+   - Once finalized → RoleSpec(status="match")
    ↓
-[JD]      → build structured JDs; optionally LLM polish (same JSON shape)
+[Profile]
+   - Enrich RoleSpec with must-haves / nice-to-haves / seniority / geo
+   - Loaded from curated/custom JSON templates
    ↓
-[Plan]    → checklist + interview loop (MD/JSON) + inclusivity + emails
+[JD]
+   - Build structured Job Descriptions
+   - Optionally refine text with LLM (strict JSON I/O)
    ↓
-UI tabs   → view/export MD/JSON/DOCX + LLM usage log
+[Plan]
+   - Generate checklist + interview loop (MD/JSON)
+   - Inclusive language scan
+   - Outreach emails (only for finalized roles)
+   ↓
+[UI Tabs]
+   - Roles & JDs
+   - Checklist / Plan
+   - Tools (Email / Inclusive Warnings / LLM usage log)
+   - Export (MD / JSON / DOCX)
+
 ```
 
 

@@ -1,0 +1,18 @@
+[
+  {
+    "id": "founding_engineer",
+    "title": "Founding Engineer",
+    "aliases": ["Founding SWE", "Engineer #1", "First Engineer", "Founding Software Engineer"],
+    "file": "role_knowledge/founding_engineer.json",
+    "function": "Engineering",
+    "approved": true
+  },
+  {
+    "id": "genai_intern",
+    "title": "GenAI Intern",
+    "aliases": ["AI Intern", "ML Intern", "LLM Intern", "Generative AI Intern"],
+    "file": "role_knowledge/genai_intern.json",
+    "function": "Engineering",
+    "approved": true
+  }
+]
