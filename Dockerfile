@@ -16,13 +16,8 @@ COPY . .
 
 # Streamlit config: headless + bind to 0.0.0.0:8080 (what EB expects)
 RUN mkdir -p /root/.streamlit && \
-    /bin/sh -c 'cat > /root/.streamlit/config.toml <<EOF
-[server]
-headless = true
-enableCORS = false
-address = "0.0.0.0"
-port = 8080
-EOF'
+    printf "[server]\nheadless = true\nenableCORS = false\naddress = \"0.0.0.0\"\nport = 8080\n" \
+    > /root/.streamlit/config.toml
 
 EXPOSE 8080
 CMD ["streamlit", "run", "app/ui.py", "--server.port", "8080", "--server.address", "0.0.0.0"]
