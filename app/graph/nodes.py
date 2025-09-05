@@ -65,16 +65,39 @@ def node_intake(state: AppState) -> AppState:
     return state
 
 
-# --- Node 2: role profiler ---
+# --- Node 2: role profiler (enrich-only; never clobber user edits) ---
 def node_profile(state: AppState) -> AppState:
-    # Only enrich roles that are finalized (status == "match")
-    for idx, role in enumerate([r for r in state.roles if r.status == "match"]):
-        tpl = load_template_for_role(role)
-        role.must_haves = tpl.get("must_haves", []) or tpl.get("skills", {}).get("must", [])
-        role.nice_to_haves = tpl.get("nice_to_haves", []) or tpl.get("skills", {}).get("nice", [])
-        role.seniority = role.seniority or tpl.get("seniority")
+    """
+    For each role, load its template and FILL ONLY MISSING FIELDS.
+    Do NOT overwrite fields (e.g., must_haves / nice_to_haves / responsibilities)
+    if the user or a previous step already set them.
+    """
+    for idx, role in enumerate(state.roles):
+        tpl = load_template_for_role(role) or {}
+
+        tpl_must = tpl.get("must_haves") or tpl.get("skills", {}).get("must", []) or []
+        tpl_nice = tpl.get("nice_to_haves") or tpl.get("skills", {}).get("nice", []) or []
+        tpl_resp = tpl.get("responsibilities", []) or []
+
+        if not role.must_haves:
+            role.must_haves = list(tpl_must)
+
+        if not role.nice_to_haves:
+            role.nice_to_haves = list(tpl_nice)
+
+        if not role.responsibilities:
+            role.responsibilities = list(tpl_resp)
+
+        if not role.seniority:
+            role.seniority = tpl.get("seniority", role.seniority or "Mid")
+
+        # Prefer existing role.geo; otherwise, take from global constraints if present
         role.geo = role.geo or state.global_constraints.get("geo")
+
+        state.roles[idx] = role
+
     return state
+
 
 
 # --- Node 3: JD compose (template-first; optional LLM refine) ---

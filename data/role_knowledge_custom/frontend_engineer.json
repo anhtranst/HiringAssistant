@@ -1,0 +1,43 @@
+{
+  "id": "frontend_engineer",
+  "title": "Frontend Engineer",
+  "aliases": [],
+  "function": "Engineering",
+  "seniority": "Senior",
+  "skills": {
+    "must": [
+      "Proficient in JavaScript and TypeScript",
+      "Experience with React or Angular frameworks",
+      "Strong understanding of HTML5 and CSS3",
+      "Familiarity with RESTful APIs and GraphQL",
+      "Knowledge of responsive design principles",
+      "Experience with version control systems (Git)"
+    ],
+    "nice": [
+      "Familiarity with state management libraries (Redux)",
+      "Experience with testing frameworks (Jest",
+      "Mocha)",
+      "Knowledge of web performance optimization techniques",
+      "Understanding of accessibility standards (WCAG)",
+      "Experience with CI/CD pipelines"
+    ]
+  },
+  "responsibilities": [
+    "Develop and maintain user-facing features",
+    "Collaborate with UX/UI designers for implementation",
+    "Optimize applications for maximum speed",
+    "Ensure code quality through reviews and testing",
+    "Troubleshoot and debug applications",
+    "Stay updated with emerging frontend technologies"
+  ],
+  "interview_loop": [
+    "Screen",
+    "Tech Deep-Dive",
+    "System Design",
+    "Founder Chat",
+    "References"
+  ],
+  "sourcing_tags": [],
+  "approved": false,
+  "version": 1
+}

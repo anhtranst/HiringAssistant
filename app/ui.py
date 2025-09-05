@@ -9,13 +9,14 @@ from pydantic import ValidationError
 from graph.graph_builder import build_graph
 from graph.state import AppState
 
-# Analytics / exports (unchanged)
+# Analytics / exports
 from tools.analytics import log_event
 from tools.exporters import checklist_json_to_docx
 
-# Role creation / KB refresh for the UI resolver
+# Role creation / KB / templates / AI suggester
 from tools.role_matcher import save_custom_role, load_kb
 from tools.search_stub import load_template_for_role
+from tools.skill_suggester import suggest_skills_with_meta  # may also return 'responsibilities'
 
 load_dotenv()
 
@@ -49,6 +50,28 @@ def set_field(obj, name, value):
     elif isinstance(obj, dict):
         obj[name] = value
 
+def bump_llm_usage(state, meta: dict, feature: str):
+    """
+    Increment LLM usage counters if meta['used'] is True.
+    Attach a minimal log entry so usage is visible in the Tools tab.
+    """
+    if not meta or not meta.get("used"):
+        return state
+    gc = _get(state, "global_constraints", {}) or {}
+    gc["llm_calls"] = int(gc.get("llm_calls", 0)) + 1
+    log = list(gc.get("llm_log", []))
+    log.append({
+        "feature": feature,          # e.g., "skill_suggestion"
+        "model": meta.get("model"),
+        "error": meta.get("error"),
+    })
+    gc["llm_log"] = log
+    # Write back
+    if isinstance(state, dict):
+        state["global_constraints"] = gc
+    else:
+        state.global_constraints = gc
+    return state
 
 # -----------------------
 # Input controls
@@ -76,7 +99,7 @@ if "last_state" not in st.session_state:
     st.session_state["last_state"] = None
 
 # -----------------------
-# Run the graph
+# Run the graph (initial)
 # -----------------------
 if st.button("Plan Hiring", type="primary"):
     log_event("click_plan", {"timeline_weeks": timeline_weeks, "budget_usd": budget_usd})
@@ -117,12 +140,30 @@ def _get(s, name, default=None):
         return s.get(name, default)
     return getattr(s, name, default)
 
+def _invoke_and_store(state):
+    """
+    Run the graph, coerce dict→AppState if needed, then save to session.
+    Use this everywhere we re-run the pipeline so 'last_state' is always safe.
+    """
+    graph = build_graph()
+    result = graph.invoke(state)
+    if isinstance(result, dict):
+        try:
+            result = AppState(**result)
+        except ValidationError:
+            # keep dict if coercion fails (shouldn't happen with our nodes)
+            pass
+    st.session_state["last_state"] = result
+
 if state is None:
     st.info("Enter your need and click **Plan Hiring** to generate JDs and a checklist.")
 else:
     # Tabs for results
     t1, t2, t3, t4 = st.tabs(["🎯 Roles & JDs", "✅ Checklist / Plan", "🧰 Tools (Email/Inclusive)", "📤 Export"])
 
+    # ============================================================
+    # Tab 1 — Roles & JDs
+    # ============================================================
     with t1:
         st.subheader("Roles")
         roles = _get(state, "roles", []) or []
@@ -154,15 +195,57 @@ else:
                     # B) or create a new role
                     st.markdown("**Or create a new role**")
                     with st.form(f"create_role_form_{idx}", clear_on_submit=False):
-                        new_title = st.text_input("Title", value=title)
-                        function = st.selectbox("Function", ["Engineering", "Data", "Design", "GTM", "Operations"], index=0)
-                        seniority = st.selectbox("Seniority", ["Intern", "Junior", "Mid", "Senior", "Staff", "Principal", "Lead"], index=3)
-                        must = st.text_area("Must-have skills (comma-separated)", value="")
-                        nice = st.text_area("Nice-to-have skills (comma-separated)", value="")
-                        resp = st.text_area("Responsibilities (one per line)", value="")
-                        loop_default = ["Screen", "Tech Deep-Dive", "System Design", "Founder Chat", "References"]
-                        submit_new = st.form_submit_button("Create new role")
+                        new_title = st.text_input("Title", value=title, key=f"crt_title_{idx}")
+                        function = st.selectbox("Function", ["Engineering", "Data", "Design", "GTM", "Operations"], index=0, key=f"crt_fn_{idx}")
+                        seniority = st.selectbox("Seniority", ["Intern","Junior","Mid","Senior","Staff","Principal","Lead"], index=3, key=f"crt_sen_{idx}")
 
+                        # --- Textareas controlled via session_state keys (seed once) ---
+                        must_key = f"crt_must_{idx}"
+                        nice_key = f"crt_nice_{idx}"
+                        resp_key = f"crt_resp_{idx}"
+                        if must_key not in st.session_state:
+                            st.session_state[must_key] = ""
+                        if nice_key not in st.session_state:
+                            st.session_state[nice_key] = ""
+                        if resp_key not in st.session_state:
+                            st.session_state[resp_key] = ""
+
+                        # --- Form buttons (form_submit_button inside form) ---
+                        c_gen, c_submit = st.columns([1, 1])
+
+                        with c_gen:
+                            gc = _get(state, "global_constraints", {}) or {}
+                            cap = int(gc.get("llm_cap", 0))
+                            used = int(gc.get("llm_calls", 0))
+                            ai_disabled = used >= cap
+
+                            do_suggest = st.form_submit_button("✨ Suggest with AI", disabled=ai_disabled)
+                            if do_suggest:
+                                title_in = st.session_state[f"crt_title_{idx}"]
+                                sen_in = st.session_state[f"crt_sen_{idx}"]
+                                skills, meta = suggest_skills_with_meta(title_in, sen_in)
+
+                                # populate skills
+                                st.session_state[must_key] = ", ".join(skills.get("must", []))
+                                st.session_state[nice_key] = ", ".join(skills.get("nice", []))
+                                # populate responsibilities (if provided)
+                                if "responsibilities" in skills:
+                                    st.session_state[resp_key] = "\n".join(skills["responsibilities"])
+
+                                last = st.session_state.get("last_state")
+                                if last is not None:
+                                    st.session_state["last_state"] = bump_llm_usage(last, meta, feature="skill_suggestion")
+                                st.rerun()
+
+                        with c_submit:
+                            submit_new = st.form_submit_button("Create new role")
+
+                        # Render textareas AFTER potential AI update, without value=
+                        must = st.text_area("Must-have skills (comma-separated)", key=must_key)
+                        nice = st.text_area("Nice-to-have skills (comma-separated)", key=nice_key)
+                        resp = st.text_area("Responsibilities (one per line)", key=resp_key)
+
+                    # Actions below the form (outside form scope)
                     c1, c2 = st.columns(2)
                     with c1:
                         if suggestions and st.button("Use selected suggestion", key=f"use_suggest_{idx}"):
@@ -176,13 +259,13 @@ else:
                             rec = next((k for k in kb if k["id"] == chosen["role_id"]), None)
                             set_field(r, "file", rec["file"] if rec else None)
                             set_field(r, "suggestions", [])
-                            # re-run
-                            graph = build_graph()
-                            st.session_state["last_state"] = graph.invoke(state)
+                            # re-run the pipeline and store safely
+                            _invoke_and_store(state)
                             st.rerun()
 
                     with c2:
                         if submit_new:
+                            loop_default = ["Screen", "Tech Deep-Dive", "System Design", "Founder Chat", "References"]
                             payload = {
                                 "title": new_title.strip(),
                                 "function": function,
@@ -204,8 +287,7 @@ else:
                             set_field(r, "status", "match")
                             set_field(r, "confidence", 1.0)
                             set_field(r, "suggestions", [])
-                            graph = build_graph()
-                            st.session_state["last_state"] = graph.invoke(state)
+                            _invoke_and_store(state)
                             st.success(f"Created and applied custom role: {saved['title']}")
                             st.rerun()
 
@@ -213,7 +295,7 @@ else:
             st.info("Once you confirm all roles, the Job Descriptions, Plan, and Outreach Emails will be generated.")
             st.stop()
 
-        # ---- Matched roles: editable details ----
+        # ---- Matched roles: editable details + AI suggestion ----
         matched_roles = [r for r in roles if field(r, "status") == "match"]
         if not matched_roles:
             st.info("No finalized roles yet.")
@@ -224,11 +306,13 @@ else:
                 st.markdown(f"### {title}  ·  ✅ Matched  · score {conf:.2f}")
 
                 tpl = load_template_for_role(r)
-                must = field(r, "must_haves") or tpl.get("must_haves") or tpl.get("skills", {}).get("must", [])
-                nice = field(r, "nice_to_haves") or tpl.get("nice_to_haves") or tpl.get("skills", {}).get("nice", [])
+                must_tpl = field(r, "must_haves") or tpl.get("must_haves") or tpl.get("skills", {}).get("must", [])
+                nice_tpl = field(r, "nice_to_haves") or tpl.get("nice_to_haves") or tpl.get("skills", {}).get("nice", [])
+                resp_tpl = tpl.get("responsibilities", [])
                 seniority = field(r, "seniority") or tpl.get("seniority", "Mid")
 
                 with st.expander("Edit role details", expanded=True):
+                    # Title & seniority first
                     new_title = st.text_input("Title", value=title, key=f"title_{i}")
                     new_sen = st.selectbox(
                         "Seniority",
@@ -236,18 +320,60 @@ else:
                         index=["Intern", "Junior", "Mid", "Senior", "Staff", "Principal", "Lead"].index(seniority),
                         key=f"sen_{i}"
                     )
-                    must_s = st.text_area("Must-have skills (comma-separated)", value=", ".join(must), key=f"must_{i}")
-                    nice_s = st.text_area("Nice-to-have skills (comma-separated)", value=", ".join(nice), key=f"nice_{i}")
+
+                    # --- Keys for textareas & initial seeding ---
+                    must_key = f"must_{i}"
+                    nice_key = f"nice_{i}"
+                    resp_key = f"resp_{i}"
+                    if must_key not in st.session_state:
+                        st.session_state[must_key] = ", ".join(must_tpl)
+                    if nice_key not in st.session_state:
+                        st.session_state[nice_key] = ", ".join(nice_tpl)
+                    if resp_key not in st.session_state:
+                        st.session_state[resp_key] = "\n".join(resp_tpl)
+
+                    # --- AI Suggestion button BEFORE textareas ---
+                    gc = _get(state, "global_constraints", {}) or {}
+                    cap = int(gc.get("llm_cap", 0))
+                    used = int(gc.get("llm_calls", 0))
+                    ai_disabled = used >= cap
+
+                    ai_cols = st.columns([1, 3])
+                    with ai_cols[0]:
+                        if st.button("✨ Suggest with AI", key=f"regen_{i}", disabled=ai_disabled):
+                            title_in = st.session_state.get(f"title_{i}", new_title)
+                            sen_in = st.session_state.get(f"sen_{i}", new_sen)
+
+                            skills, meta = suggest_skills_with_meta(title_in, sen_in)
+
+                            st.session_state[must_key] = ", ".join(skills.get("must", []))
+                            st.session_state[nice_key] = ", ".join(skills.get("nice", []))
+                            if "responsibilities" in skills:
+                                st.session_state[resp_key] = "\n".join(skills["responsibilities"])
+
+                            last = st.session_state.get("last_state")
+                            if last is not None:
+                                st.session_state["last_state"] = bump_llm_usage(last, meta, feature="skill_suggestion")
+                            st.rerun()
+                    with ai_cols[1]:
+                        if cap:
+                            st.caption(f"LLM calls: {used}/{cap}")
+
+                    # Text areas (no value= when using keys)
+                    must_s = st.text_area("Must-have skills (comma-separated)", key=must_key)
+                    nice_s = st.text_area("Nice-to-have skills (comma-separated)", key=nice_key)
+                    resp_s = st.text_area("Responsibilities (one per line)", key=resp_key)
 
                     colx, coly = st.columns(2)
                     with colx:
                         if st.button("Apply changes for this plan", key=f"apply_{i}"):
-                            set_field(r, "title", new_title.strip() or title)
-                            set_field(r, "seniority", new_sen)
+                            set_field(r, "title", (st.session_state.get(f"title_{i}") or new_title).strip() or title)
+                            set_field(r, "seniority", st.session_state.get(f"sen_{i}", new_sen))
                             set_field(r, "must_haves", [s.strip() for s in must_s.split(",") if s.strip()])
                             set_field(r, "nice_to_haves", [s.strip() for s in nice_s.split(",") if s.strip()])
-                            graph = build_graph()
-                            st.session_state["last_state"] = graph.invoke(state)
+                            set_field(r, "responsibilities", [ln.strip() for ln in resp_s.splitlines() if ln.strip()])
+
+                            _invoke_and_store(state)
                             st.success("Changes applied for this run.")
                             st.rerun()
 
@@ -255,15 +381,15 @@ else:
                         save_it = st.checkbox("Also save as a reusable custom template", key=f"save_{i}", value=False)
                         if save_it and st.button("Save as custom template", key=f"savebtn_{i}"):
                             payload = {
-                                "title": new_title.strip() or title,
+                                "title": (st.session_state.get(f"title_{i}") or new_title).strip() or title,
                                 "function": "Engineering",
-                                "seniority": new_sen,
+                                "seniority": st.session_state.get(f"sen_{i}", new_sen),
                                 "aliases": [],
                                 "skills": {
                                     "must": [s.strip() for s in must_s.split(",") if s.strip()],
                                     "nice": [s.strip() for s in nice_s.split(",") if s.strip()],
                                 },
-                                "responsibilities": tpl.get("responsibilities", []),  # keep existing unless you extend UI
+                                "responsibilities": [ln.strip() for ln in resp_s.splitlines() if ln.strip()],
                                 "interview_loop": tpl.get("interview_loop", ["Screen","Tech Deep-Dive","System Design","Founder Chat","References"]),
                                 "sourcing_tags": tpl.get("sourcing_tags", [])
                             }
@@ -273,8 +399,8 @@ else:
                             set_field(r, "file", saved["file"])
                             set_field(r, "status", "match")
                             set_field(r, "confidence", 1.0)
-                            graph = build_graph()
-                            st.session_state["last_state"] = graph.invoke(state)
+
+                            _invoke_and_store(state)
                             st.success(f"Saved as custom template: {saved['title']}")
                             st.rerun()
 
@@ -286,7 +412,9 @@ else:
             st.markdown(f"### {title}")
             st.json(jd)
 
-
+    # ============================================================
+    # Tab 2 — Checklist / Plan
+    # ============================================================
     with t2:
         st.subheader("Checklist (Markdown)")
         st.code(_get(state, "checklist_markdown", "") or "", language="markdown")
@@ -294,6 +422,9 @@ else:
         st.subheader("Checklist (JSON)")
         st.json(_get(state, "checklist_json", {}) or {})
 
+    # ============================================================
+    # Tab 3 — Tools
+    # ============================================================
     with t3:
         st.subheader("Inclusive Language Warnings")
         st.json(_get(state, "inclusive_warnings", []) or [])
@@ -311,8 +442,10 @@ else:
             "log": gc.get("llm_log", []),
         })
 
+    # ============================================================
+    # Tab 4 — Export
+    # ============================================================
     with t4:
-        # Reuse _get to handle AppState or dict
         checklist_md = _get(state, "checklist_markdown", "") or ""
         checklist_js = _get(state, "checklist_json", {}) or {}
 

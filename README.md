@@ -52,11 +52,12 @@ HiringAssistant/
 │  │  ├─ __init__.py
 │  │  ├─ state.py                        # AppState, RoleSpec, JD models
 │  │  ├─ nodes.py                        # intake → profile → jd → plan
-│  │  └─ graph_builder.py                 # LangGraph wiring
+│  │  └─ graph_builder.py                # LangGraph wiring
 │  └─ tools/
 │     ├─ __init__.py
 │     ├─ role_matcher.py                 # Extract phrases, match KB, save/load roles
 │     ├─ search_stub.py                  # load_role_template, load_template_for_role
+│     ├─ skill_suggester.py              # AI suggestions for must/nice skills & responsibilities
 │     ├─ checklist.py                    # Build checklist + interview loop
 │     ├─ email_writer.py                 # Outreach email templates
 │     ├─ inclusive_check.py              # Inclusive language linter
@@ -89,31 +90,37 @@ User prompt
 [Intake v2]
    - Extract candidate phrases
    - Match against roles_kb.json (+ roles_kb_custom.json)
-   - Produce RoleSpec(status="match"|"suggest"|"unknown")
+   - Produce RoleSpec(status="match" | "suggest" | "unknown")
    ↓
 [UI Resolver]
-   - If suggest/unknown: show suggestions OR create a new role
-   - Save custom role → role_knowledge_custom/ + roles_kb_custom.json
+   - For suggest/unknown: pick a suggested template OR create a new role
+   - (Optional) ✨ AI suggest must-have / nice-to-have skills + responsibilities
+   - Save custom role → role_knowledge_custom/ + roles_kb_custom.json (when chosen)
    - Once finalized → RoleSpec(status="match")
    ↓
-[Profile]
-   - Enrich RoleSpec with must-haves / nice-to-haves / seniority / geo
-   - Loaded from curated/custom JSON templates
+[Profile (enrich-only)]
+   - Load curated/custom JSON template for each matched role
+   - FILL ONLY MISSING FIELDS (must_haves, nice_to_haves, responsibilities, seniority, geo)
+   - Never overwrite fields already edited in UI
    ↓
 [JD]
-   - Build structured Job Descriptions
-   - Optionally refine text with LLM (strict JSON I/O)
+   - Build structured Job Descriptions from RoleSpec
+   - (Optional) LLM polish (strict JSON in/out; capped by llm_cap)
    ↓
 [Plan]
-   - Generate checklist + interview loop (MD/JSON)
+   - Generate checklist + interview loop (Markdown + JSON)
    - Inclusive language scan
    - Outreach emails (only for finalized roles)
    ↓
 [UI Tabs]
-   - Roles & JDs
+   - Roles & JDs (edit matched roles; ✨ AI re-suggest; Apply changes re-runs graph)
    - Checklist / Plan
-   - Tools (Email / Inclusive Warnings / LLM usage log)
+   - Tools (Email / Inclusive warnings / LLM usage log)
    - Export (MD / JSON / DOCX)
+
+Notes:
+- **Apply changes** updates only the current run (session) and re-runs the graph; use “Save as custom template” to persist to disk.
+- Custom roles are stored under `data/role_knowledge_custom/` and indexed in `data/roles_kb_custom.json`.
 
 ```
 

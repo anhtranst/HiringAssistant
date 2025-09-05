@@ -6,5 +6,13 @@
     "file": "role_knowledge_custom/backend_engineer.json",
     "function": "Engineering",
     "approved": false
+  },
+  {
+    "id": "frontend_engineer",
+    "title": "Frontend Engineer",
+    "aliases": [],
+    "file": "role_knowledge_custom/frontend_engineer.json",
+    "function": "Engineering",
+    "approved": false
   }
 ]
