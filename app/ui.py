@@ -53,7 +53,7 @@ if "last_state" not in st.session_state:
 # -----------------------
 # Run the graph (initial)
 # -----------------------
-if st.button("Plan Hiring", type="primary"):
+if st.button("Review role suggestions", type="primary"):
     log_event("click_plan", {"timeline_weeks": timeline_weeks, "budget_usd": budget_usd})
 
     graph = build_graph()
@@ -93,7 +93,7 @@ def _get(s, name, default=None):
     return getattr(s, name, default)
 
 if state is None:
-    st.info("Enter your need and click **Plan Hiring** to generate JDs and a checklist.")
+    st.info("Describe your need and click **Review role suggestions** to pick the roles to hire.")
 else:
     # Tabs for results
     t1, t2, t3, t4 = st.tabs(["🎯 Roles & JDs", "✅ Checklist / Plan", "🧰 Tools (Email/Inclusive)", "📤 Export"])
