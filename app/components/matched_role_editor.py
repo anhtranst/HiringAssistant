@@ -12,6 +12,61 @@ from tools.skill_suggester import suggest_skills_with_meta
 from tools.role_matcher import save_custom_role
 
 
+def _safe_get(obj, name, default=None):
+    """Works for both pydantic models (attributes) and dicts (keys)."""
+    try:
+        return getattr(obj, name)
+    except Exception:
+        pass
+    if isinstance(obj, dict):
+        return obj.get(name, default)
+    return default
+
+
+def _remove_role_from_state(state, target_role) -> bool:
+    """
+    Remove a role from state.roles.
+    We try (in order): identity, role_id, (title + status).
+    Returns True if something was removed.
+    """
+    roles = (_get(state, "roles", []) or [])
+    idx_to_pop = None
+
+    # 1) Identity match (same object)
+    for j, r in enumerate(roles):
+        if r is target_role:
+            idx_to_pop = j
+            break
+
+    # 2) role_id match
+    if idx_to_pop is None:
+        rid = _safe_get(target_role, "role_id")
+        if rid:
+            for j, r in enumerate(roles):
+                if _safe_get(r, "role_id") == rid:
+                    idx_to_pop = j
+                    break
+
+    # 3) (title + status) match
+    if idx_to_pop is None:
+        t_title, t_status = _safe_get(target_role, "title"), _safe_get(target_role, "status")
+        for j, r in enumerate(roles):
+            if _safe_get(r, "title") == t_title and _safe_get(r, "status") == t_status:
+                idx_to_pop = j
+                break
+
+    if idx_to_pop is None:
+        return False
+
+    roles.pop(idx_to_pop)
+    # Assign back (supports pydantic model or dict AppState)
+    try:
+        state.roles = roles
+    except Exception:
+        state["roles"] = roles
+    return True
+
+
 def matched_role_editor(i, role, state, invoke_and_store_cb):
     """
     Renders an editor for one matched role.
@@ -99,10 +154,11 @@ def matched_role_editor(i, role, state, invoke_and_store_cb):
         nice_s = st.text_area("Nice-to-have skills (comma-separated)", key=nice_key)
         resp_s = st.text_area("Responsibilities (one per line)", key=resp_key)
 
-        colx, coly = st.columns(2)
+        # Side-by-side: Save + Remove
+        col_save, col_remove = st.columns(2)
 
         # ----- Save (store-only) -----
-        with colx:
+        with col_save:
             if st.button("Save changes (no rebuild)", key=f"apply_{i}"):
                 set_field(role, "title", (ss.get(f"title_{i}") or new_title).strip() or title)
                 set_field(role, "seniority", ss.get(f"sen_{i}", new_sen))
@@ -116,8 +172,21 @@ def matched_role_editor(i, role, state, invoke_and_store_cb):
                 changed = True
                 st.rerun()
 
+        # ----- Remove this matched role (store-only) -----
+        with col_remove:
+            if st.button("🗑 Remove this role", key=f"remove_{i}", help="Remove this hiring role from the plan"):
+                if _remove_role_from_state(state, role):
+                    # Store-only; mark plan stale via callback
+                    invoke_and_store_cb(state)
+                    st.success("Role removed. Click **Generate plan & JDs** to rebuild outputs.")
+                    changed = True
+                    st.rerun()
+                else:
+                    st.warning("Could not remove role (not found in current state).")
+
         # ----- Save as reusable custom template (store-only) -----
-        with coly:
+        save_col, _ = st.columns([2, 1])
+        with save_col:
             save_it = st.checkbox("Also save as a reusable custom template", key=f"save_{i}", value=False)
             if save_it and st.button("Save as custom template (no rebuild)", key=f"savebtn_{i}"):
                 payload = {

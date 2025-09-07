@@ -56,6 +56,7 @@ def unresolved_role_panel(idx, role, state, invoke_and_store_cb):
       - Apply selection OR create a brand-new custom role
       - NEW: Show mission in preview; allow mission input for custom roles
       - NEW: 'Suggest with AI' now hydrates Mission via tools/skill_suggester
+      - NEW: 'Discard this role' removes the unresolved slot (store-only; no rebuild)
     """
     changed = False
     title = field(role, "title", "Untitled role")
@@ -80,6 +81,22 @@ def unresolved_role_panel(idx, role, state, invoke_and_store_cb):
     excluded_count = len(raw_suggestions) - len(suggestions)
 
     with st.expander(f"Resolve: {title}  ·  status={status}", expanded=True):
+
+        # --- Discard this unresolved slot (store-only; marks plan stale via parent wrapper)
+        disc_a, disc_b = st.columns([1, 7])
+        with disc_a:
+            if st.button("🗑 Discard this role", key=f"discard_{idx}", help="Remove this unresolved role slot"):
+                roles = _get(state, "roles", []) or []
+                if 0 <= idx < len(roles):
+                    roles.pop(idx)
+                    # Assign back to the state (supports pydantic model or dict)
+                    try:
+                        state.roles = roles
+                    except Exception:
+                        state["roles"] = roles
+                    # Store-only persistence (no heavy rebuild here); parent wrapper sets plan_stale=True
+                    invoke_and_store_cb(state)
+                    st.rerun()
 
         # Optional hint if we hid some options
         if excluded_count > 0:
@@ -153,6 +170,7 @@ def unresolved_role_panel(idx, role, state, invoke_and_store_cb):
                 set_field(role, "file", rec["file"] if rec else None)
                 set_field(role, "suggestions", [])
 
+                # Store-only persist; parent wrapper marks plan_stale=True (no rebuild yet)
                 invoke_and_store_cb(state)
                 changed = True
                 st.rerun()
@@ -303,7 +321,6 @@ def unresolved_role_panel(idx, role, state, invoke_and_store_cb):
                     "mission": (skills.get("mission") or _fallback_mission(title_in)),
                 }
 
-
                 # LLM usage accounting/logging for the skills suggestion tool
                 last = st.session_state.get("last_state")
                 if last is not None:
@@ -350,6 +367,7 @@ def unresolved_role_panel(idx, role, state, invoke_and_store_cb):
                 set_field(role, "confidence_source", "manual")
                 set_field(role, "suggestions", [])
 
+                # Store-only; parent wrapper marks plan_stale=True (no rebuild here)
                 invoke_and_store_cb(state)
                 st.success(f"Created and applied custom role: {saved['title']}")
                 changed = True
