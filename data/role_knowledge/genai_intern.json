@@ -3,19 +3,10 @@
   "title": "Founding Engineer",
   "aliases": ["Founding Software Engineer", "First Engineer", "Early Software Engineer", "Founding Full-Stack Engineer"],
   "function": "Engineering",
-  "seniority": "Senior",
+  "seniority": "Intern",
   "skills": {
     "must": [
-      "Strong software engineering fundamentals",
-      "Experience building and owning production services",
-      "Proficiency in at least one backend language (e.g., Python, Go, TypeScript/Node)",
-      "Designing and integrating REST/GraphQL APIs",
-      "Databases (SQL and/or NoSQL) and data modeling",
-      "Cloud infrastructure (AWS, GCP, or Azure)",
-      "Microservices or service-oriented architecture",
-      "CI/CD and automated testing",
-      "Containers and orchestration (Docker, Kubernetes)",
-      "Observability (logging, metrics, tracing)"
+      "Strong software engineering fundamentals"
     ],
     "nice": [
       "Frontend experience (React/TypeScript)",

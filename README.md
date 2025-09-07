@@ -50,24 +50,24 @@ HiringAssistant/
 │  ├─ __init__.py
 │  ├─ tabs/
 │  │  ├─ __init__.py
-│  │  └─ roles_tab.py                    # NEW: Tab 1 orchestration (roles & JDs) + callbacks to re-run graph
+│  │  └─ roles_tab.py                    # Tab 1 orchestration (roles & JDs) + callbacks to re-run graph
 │  ├─ components/
 │  │  ├─ __init__.py
-│  │  ├─ matched_role_editor.py          # NEW: editor for matched roles; AI suggest; apply changes; save custom template
-│  │  └─ unresolved_role_panel.py        # NEW: top-3 suggestions UI; defaults to newest custom; preview; create-new flow
+│  │  ├─ matched_role_editor.py          # Editor for matched roles; shows “Selected by HR” when manual; AI suggest; apply changes; save custom template
+│  │  └─ unresolved_role_panel.py        # Suggestions UI (dropdown + live preview); de-dupes already-chosen templates; create-new flow (AI assist)
 │  ├─ services/
 │  │  ├─ __init__.py
-│  │  └─ state_helpers.py                # NEW: field/set_field/_get helpers + bump_llm_usage
+│  │  └─ state_helpers.py                # field/set_field/_get helpers + bump_llm_usage
 │  ├─ graph/
 │  │  ├─ __init__.py
 │  │  ├─ state.py                        # AppState, RoleSpec, JD models
-│  │  ├─ nodes.py                        # UPDATED: LLM-first intake + robust heuristic fallback; top-3 suggests; profile fill-only; JD polish
+│  │  ├─ nodes.py                        # LLM-first intake + heuristic fallback; top-3 suggests; profile fill-only; JD polish
 │  │  └─ graph_builder.py                # LangGraph wiring
 │  └─ tools/
 │     ├─ __init__.py
-│     ├─ role_matcher.py                 # UPDATED: repo-root data paths; timestamped custom ids; created_at; improved extractor; top-3 matching
-│     ├─ llm_extractor.py                # NEW: optional LLM-based role extraction (strict JSON response)
-│     ├─ search_stub.py                  # UPDATED: repo-root-aware template loader (curated + custom)
+│     ├─ role_matcher.py                 # Repo-root data paths; timestamped custom ids; created_at; improved extractor; top-3 matching
+│     ├─ llm_extractor.py                # Optional LLM-based role extraction (strict JSON response)
+│     ├─ search_stub.py                  # Repo-root-aware template loader (curated + custom)
 │     ├─ skill_suggester.py              # AI suggestions for must/nice skills & responsibilities
 │     ├─ checklist.py                    # Build checklist + interview loop
 │     ├─ email_writer.py                 # Outreach email templates
@@ -77,10 +77,10 @@ HiringAssistant/
 │     └─ exporters.py                    # Export JSON → DOCX
 ├─ data/
 │  ├─ roles_kb.json                      # Curated role index
-│  ├─ roles_kb_custom.json               # Custom role index (now includes created_at)
+│  ├─ roles_kb_custom.json               # Custom role index (includes created_at)
 │  ├─ role_knowledge/                    # Curated templates (canonical schema: skills.{must,nice})
-│  │  ├─ founding_engineer.json          # UPDATED to canonical schema
-│  │  └─ genai_intern.json               # UPDATED to canonical schema
+│  │  ├─ founding_engineer.json
+│  │  └─ genai_intern.json
 │  └─ role_knowledge_custom/             # Custom templates (timestamped ids: <slug>__custom__YYYYMMDD_HHMMSS)
 ├─ exports/                              # (ignored) generated files
 ├─ logs/                                 # (ignored) usage logs
@@ -107,11 +107,15 @@ User prompt
   ↓
 [UI Resolver]
   - For each suggested role: default-select the newest custom template if present
-  - Preview selected template (function, skills.must/nice, responsibilities)
-  - Choose a suggestion OR create a brand-new custom role
-  - (Optional) ✨ AI suggest must-have / nice-to-have skills + responsibilities
-  - Save custom role → data/role_knowledge_custom/<slug>__custom__YYYYMMDD_HHMMSS.json
-    and index in data/roles_kb_custom.json (includes created_at)
+  - Choose from a dropdown (stable indices); preview updates immediately on selection
+  - Exclude templates that are already chosen in other slots (no duplicate picks)
+  - “Use selected suggestion” marks the role as matched:
+      • Sets confidence=None and confidence_source="manual" (shows as “Selected by HR”)
+  - Or create a brand-new custom role:
+      • ✨ AI can suggest skills/responsibilities (respects LLM cap)
+      • Saving a custom role marks it matched with confidence=None, confidence_source="manual"
+      • Persists to data/role_knowledge_custom/<slug>__custom__YYYYMMDD_HHMMSS.json
+        and indexes in data/roles_kb_custom.json (includes created_at)
   - Once finalized → RoleSpec(status="match")
   ↓
 [Profile (enrich-only)]
@@ -129,7 +133,7 @@ User prompt
   - Outreach emails (only for finalized roles)
   ↓
 [UI Tabs]
-  - Roles & JDs (resolve roles, preview templates, edit matched roles; ✨ re-suggest; Apply changes re-runs graph)
+  - Roles & JDs (resolve roles with dropdown, live preview; de-dupe selections; edit matched roles; ✨ re-suggest; Apply changes re-runs graph)
   - Checklist / Plan
   - Tools (Email / Inclusive warnings / LLM usage log)
   - Export (MD / JSON / DOCX)

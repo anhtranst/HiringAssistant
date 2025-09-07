@@ -21,8 +21,17 @@ def matched_role_editor(i, role, state, invoke_and_store_cb):
       - Save as reusable custom template (PERSISTS to data/role_knowledge_custom/)
     """
     title = field(role, "title", "Untitled role")
-    conf = field(role, "confidence", 1.0)
-    st.markdown(f"### {title}  ·  ✅ Matched  · score {conf:.2f}")
+    conf = field(role, "confidence", None)
+    conf_src = field(role, "confidence_source")
+
+    # Header: show "Selected by HR" if manual; else show numeric score
+    if conf_src == "manual" or conf is None:
+        st.markdown(f"### {title}  ·  ✅ Matched  · Selected by HR")
+    else:
+        try:
+            st.markdown(f"### {title}  ·  ✅ Matched  · score {float(conf):.2f}")
+        except Exception:
+            st.markdown(f"### {title}  ·  ✅ Matched")
 
     tpl = load_template_for_role(role)
     must_tpl = field(role, "must_haves") or tpl.get("skills", {}).get("must", [])   # role overrides, else template
@@ -119,7 +128,9 @@ def matched_role_editor(i, role, state, invoke_and_store_cb):
                 set_field(role, "title", saved["title"])
                 set_field(role, "file", saved["file"])   # e.g. "data/role_knowledge_custom/<slug>.json"
                 set_field(role, "status", "match")
-                set_field(role, "confidence", 1.0)
+                # Mark as manual choice (no misleading score)
+                set_field(role, "confidence", None)
+                set_field(role, "confidence_source", "manual")
 
                 # Re-run the graph so downstream JDs/plan pick up new template
                 invoke_and_store_cb(state)
@@ -128,3 +139,4 @@ def matched_role_editor(i, role, state, invoke_and_store_cb):
                 st.rerun()
 
     return changed
+

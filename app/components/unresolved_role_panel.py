@@ -22,15 +22,40 @@ def unresolved_role_panel(idx, role, state, invoke_and_store_cb):
     Panel for a single unresolved role phrase:
       - Shows top-3 suggestions (provided by matcher)
       - Defaults to the newest custom if available, else top score
-      - Lets user preview and then apply a suggestion OR create a brand-new custom
+      - Preview updates immediately on selection (no extra button)
+      - Prevents picking the same template (role_id) in multiple slots by
+        excluding already-chosen templates from this panel's suggestions
+      - Apply selection OR create a brand-new custom role
     """
     changed = False
     title = field(role, "title", "Untitled role")
     status = field(role, "status", "unknown")
-    suggestions = field(role, "suggestions", []) or []
+
+    # Raw suggestions from matcher
+    raw_suggestions = field(role, "suggestions", []) or []
+
+    # ----- Exclude templates already chosen in OTHER roles -----
+    used_ids = set()
+    all_roles = _get(state, "roles", []) or []
+    for i, r in enumerate(all_roles):
+        if i == idx:
+            continue  # don't consider current panel
+        if field(r, "status") == "match":
+            rid = field(r, "role_id")
+            if rid:
+                used_ids.add(rid)
+
+    # Filter suggestions to avoid duplicates
+    suggestions = [s for s in raw_suggestions if s.get("role_id") not in used_ids]
+    excluded_count = len(raw_suggestions) - len(suggestions)
 
     with st.expander(f"Resolve: {title}  ·  status={status}", expanded=True):
-        # ---- Suggestions
+
+        # Optional hint if we hid some options
+        if excluded_count > 0:
+            st.caption(f"({excluded_count} suggestion{'s' if excluded_count > 1 else ''} hidden because that template is already chosen for another role.)")
+
+        # ---- Pretty label builder (display only)
         def _suggest_label(s):
             tag = "CUSTOM" if s.get("is_custom") else "CORE"
             ts = s.get("created_at")
@@ -39,8 +64,9 @@ def unresolved_role_panel(idx, role, state, invoke_and_store_cb):
             if dt:
                 ts_short = dt.strftime("%Y-%m-%d %H:%M")
             extra = f" · {tag}" + (f" · {ts_short}" if ts_short else "")
-            return f"{s['title']} (score {s['score']:.2f}){extra}"
+            return f"{s.get('title', '—')} (score {s.get('score', 0):.2f}){extra}"
 
+        # ---- Choose default as newest custom (if any) among the FILTERED suggestions
         default_idx = 0
         newest_dt, newest_idx = None, None
         for i, s in enumerate(suggestions):
@@ -51,36 +77,45 @@ def unresolved_role_panel(idx, role, state, invoke_and_store_cb):
         if newest_idx is not None:
             default_idx = newest_idx
 
-        labels = [_suggest_label(s) for s in suggestions]
-        choice_label = None
-        if labels:
-            choice_label = st.radio(
-                "Choose a suggested role template:",
-                labels,
-                index=default_idx,
-                key=f"suggest_choice_{idx}",
-            )
-        else:
-            st.info("No suggestions found for this phrase.")
+        # ---- Dropdown with STABLE integer options; fully controlled by session_state
+        selected_idx_key = f"suggest_choice_idx_{idx}"
+        if suggestions:
+            # If selection existed but points past the filtered list, reset it
+            if (selected_idx_key in st.session_state) and (
+                st.session_state[selected_idx_key] is None
+                or st.session_state[selected_idx_key] >= len(suggestions)
+            ):
+                st.session_state[selected_idx_key] = default_idx
 
-        # ---- Use selected suggestion (right below the radio)
-        if labels:
-            use_now = st.button(
-                "Use selected suggestion",
-                key=f"use_suggest_{idx}",
-                type="primary",
-                disabled=not choice_label,
+            # Initialize once if not present
+            if selected_idx_key not in st.session_state:
+                st.session_state[selected_idx_key] = default_idx
+
+            # Controlled widget: bind to key (no index param)
+            st.selectbox(
+                "Choose a suggested role template:",
+                options=list(range(len(suggestions))),     # stable values (0..N-1)
+                key=selected_idx_key,
+                format_func=lambda i: _suggest_label(suggestions[i]),
             )
-            if use_now and choice_label:
-                s = suggestions[labels.index(choice_label)]
+            selected_idx = st.session_state[selected_idx_key]
+        else:
+            st.info("No suggestions available for this phrase (duplicates removed or none matched).")
+            selected_idx = None
+
+        # ---- Primary CTA (right below the chooser)
+        if selected_idx is not None:
+            if st.button("Use selected suggestion", key=f"use_suggest_{idx}", type="primary"):
+                s = suggestions[selected_idx]
                 kb = load_kb()
                 rec = next((r for r in kb if r["id"] == s["role_id"]), None)
 
-                # Patch RoleSpec in place
+                # Patch RoleSpec in place (mark as manual pick)
                 set_field(role, "role_id", s["role_id"])
-                set_field(role, "title", rec["title"] if rec else s["title"])
+                set_field(role, "title", (rec["title"] if rec else s.get("title")) or title)
                 set_field(role, "status", "match")
-                set_field(role, "confidence", float(s["score"]))
+                set_field(role, "confidence", None)                 # ← no misleading score
+                set_field(role, "confidence_source", "manual")      # ← mark manual
                 set_field(role, "file", rec["file"] if rec else None)
                 set_field(role, "suggestions", [])
 
@@ -88,11 +123,12 @@ def unresolved_role_panel(idx, role, state, invoke_and_store_cb):
                 changed = True
                 st.rerun()
 
-        # ---- Preview of the selected suggestion
-        if choice_label:
-            s = suggestions[labels.index(choice_label)]
+        # ---- Preview of the currently selected suggestion (auto-updates)
+        if selected_idx is not None:
+            s = suggestions[selected_idx]
             kb = load_kb()
             rec = next((r for r in kb if r["id"] == s["role_id"]), None)
+
             if rec:
                 tpl = load_role_template(rec["file"])
                 must = tpl.get("skills", {}).get("must", []) or []
@@ -100,20 +136,27 @@ def unresolved_role_panel(idx, role, state, invoke_and_store_cb):
                 resp = tpl.get("responsibilities", []) or []
                 fn = tpl.get("function") or rec.get("function")
                 sen = tpl.get("seniority") or rec.get("seniority")
+            else:
+                skills = s.get("skills", {}) or {}
+                must = skills.get("must", []) or []
+                nice = skills.get("nice", []) or []
+                resp = s.get("responsibilities", []) or []
+                fn = s.get("function")
+                sen = s.get("seniority")
 
-                with st.container(border=True):
-                    st.caption("Template preview")
-                    left, right = st.columns(2)
-                    with left:
-                        st.markdown(f"**Function:** {fn or '—'}")
-                        st.markdown(f"**Seniority:** {sen or '—'}")
-                        st.markdown("**Must-have skills:**")
-                        st.write(", ".join(must) if must else "—")
-                        st.markdown("**Nice-to-have skills:**")
-                        st.write(", ".join(nice) if nice else "—")
-                    with right:
-                        st.markdown("**Responsibilities:**")
-                        st.write("\n".join(resp) if resp else "—")
+            with st.container(border=True):
+                st.caption("Template preview")
+                left, right = st.columns(2)
+                with left:
+                    st.markdown(f"**Function:** {fn or '—'}")
+                    st.markdown(f"**Seniority:** {sen or '—'}")
+                    st.markdown("**Must-have skills:**")
+                    st.write(", ".join(must) if must else "—")
+                    st.markdown("**Nice-to-have skills:**")
+                    st.write(", ".join(nice) if nice else "—")
+                with right:
+                    st.markdown("**Responsibilities:**")
+                    st.write("\n".join(resp) if resp else "—")
 
         # ---- Create a new role
         st.markdown("**Or create a new role**")
@@ -134,13 +177,12 @@ def unresolved_role_panel(idx, role, state, invoke_and_store_cb):
             pending_key = f"pending_ai_{idx}"
             pending = st.session_state.get(pending_key)
             if pending:
-                # Always set values BEFORE widget instantiation (safe even if keys already exist)
                 st.session_state[must_key] = pending.get("must", "")
                 st.session_state[nice_key] = pending.get("nice", "")
-                st.session_state[resp_key]  = pending.get("resp", "")
+                st.session_state[resp_key] = pending.get("resp", "")
                 del st.session_state[pending_key]
 
-            # Ensure defaults exist before widget instantiation (no-ops if already set)
+            # Ensure defaults exist before widget instantiation
             st.session_state.setdefault(must_key, "")
             st.session_state.setdefault(nice_key, "")
             st.session_state.setdefault(resp_key, "")
@@ -169,7 +211,6 @@ def unresolved_role_panel(idx, role, state, invoke_and_store_cb):
 
             # Actions after buttons
             if suggest_ai:
-                # Get suggestions and stash in pending buffer; rerun to hydrate safely
                 title_in = st.session_state.get(f"crt_title_{idx}", new_title)
                 sen_in = st.session_state.get(f"crt_sen_{idx}", seniority)
                 skills, meta = suggest_skills_with_meta(title_in, sen_in)
@@ -205,7 +246,9 @@ def unresolved_role_panel(idx, role, state, invoke_and_store_cb):
                 set_field(role, "title", saved["title"])
                 set_field(role, "file", saved["file"])
                 set_field(role, "status", "match")
-                set_field(role, "confidence", 1.0)
+                # Mark as manual choice (no misleading score)
+                set_field(role, "confidence", None)
+                set_field(role, "confidence_source", "manual")
                 set_field(role, "suggestions", [])
                 invoke_and_store_cb(state)
                 st.success(f"Created and applied custom role: {saved['title']}")
