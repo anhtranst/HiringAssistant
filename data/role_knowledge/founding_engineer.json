@@ -1,18 +1,51 @@
 {
+  "id": "founding_engineer",
+  "title": "Founding Engineer",
+  "aliases": ["Founding Software Engineer", "First Engineer", "Early Software Engineer", "Founding Full-Stack Engineer"],
+  "function": "Engineering",
   "seniority": "Senior",
-  "mission": "Own core systems and ship v1 to early customers.",
+  "skills": {
+    "must": [
+      "Strong software engineering fundamentals",
+      "Experience building and owning production services",
+      "Proficiency in at least one backend language (e.g., Python, Go, TypeScript/Node)",
+      "Designing and integrating REST/GraphQL APIs",
+      "Databases (SQL and/or NoSQL) and data modeling",
+      "Cloud infrastructure (AWS, GCP, or Azure)",
+      "Microservices or service-oriented architecture",
+      "CI/CD and automated testing",
+      "Containers and orchestration (Docker, Kubernetes)",
+      "Observability (logging, metrics, tracing)"
+    ],
+    "nice": [
+      "Frontend experience (React/TypeScript)",
+      "Distributed systems and performance tuning",
+      "Infrastructure as Code (Terraform, CDK, Pulumi)",
+      "Security and compliance fundamentals",
+      "ML/GenAI product integration experience",
+      "Cost optimization and reliability/SRE practices",
+      "Hiring/interviewing and mentoring",
+      "Startup/0→1 experience"
+    ]
+  },
   "responsibilities": [
-    "Design, build, and operate core backend services",
-    "Establish engineering practices (reviews, CI/CD, observability)",
-    "Collaborate with product and AI teams to deliver customer value"
+    "Design, build, and operate core product services end-to-end",
+    "Set engineering practices (code reviews, testing, CI/CD, on-call, observability)",
+    "Collaborate with product/design to deliver customer value quickly and iteratively",
+    "Make pragmatic architecture decisions that balance speed and long-term health",
+    "Establish reliability, monitoring, and incident response norms",
+    "Ensure data, security, and privacy best practices",
+    "Mentor teammates and help define the engineering culture",
+    "Document decisions, interfaces, and runbooks"
   ],
-  "must_haves": [
-    "Strong coding in Python/Go/Node",
-    "Cloud & databases (AWS/GCP, Postgres)",
-    "Ownership mindset and startup pace"
+  "interview_loop": [
+    "Screen",
+    "Tech Deep-Dive",
+    "System Design",
+    "Founder Chat",
+    "References"
   ],
-  "nice_to_haves": [
-    "Kubernetes or container orchestration",
-    "Observability (OpenTelemetry, metrics, tracing)"
-  ]
+  "sourcing_tags": ["founding engineer", "startup", "full-stack", "backend", "generalist"],
+  "approved": true,
+  "version": 1
 }

@@ -1,18 +1,11 @@
 [
   {
-    "id": "backend_engineer",
-    "title": "Backend Engineer",
+    "id": "founding_engineer__custom__20250907_005630",
+    "title": "Founding Engineer",
     "aliases": [],
-    "file": "role_knowledge_custom/backend_engineer.json",
+    "file": "role_knowledge_custom/founding_engineer__custom__20250907_005630.json",
     "function": "Engineering",
-    "approved": false
-  },
-  {
-    "id": "frontend_engineer",
-    "title": "Frontend Engineer",
-    "aliases": [],
-    "file": "role_knowledge_custom/frontend_engineer.json",
-    "function": "Engineering",
-    "approved": false
+    "approved": false,
+    "created_at": "2025-09-07T00:56:30Z"
   }
 ]

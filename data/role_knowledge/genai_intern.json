@@ -1,18 +1,51 @@
 {
-  "seniority": "Intern",
-  "mission": "Prototype GenAI features and assist with evaluations.",
+  "id": "founding_engineer",
+  "title": "Founding Engineer",
+  "aliases": ["Founding Software Engineer", "First Engineer", "Early Software Engineer", "Founding Full-Stack Engineer"],
+  "function": "Engineering",
+  "seniority": "Senior",
+  "skills": {
+    "must": [
+      "Strong software engineering fundamentals",
+      "Experience building and owning production services",
+      "Proficiency in at least one backend language (e.g., Python, Go, TypeScript/Node)",
+      "Designing and integrating REST/GraphQL APIs",
+      "Databases (SQL and/or NoSQL) and data modeling",
+      "Cloud infrastructure (AWS, GCP, or Azure)",
+      "Microservices or service-oriented architecture",
+      "CI/CD and automated testing",
+      "Containers and orchestration (Docker, Kubernetes)",
+      "Observability (logging, metrics, tracing)"
+    ],
+    "nice": [
+      "Frontend experience (React/TypeScript)",
+      "Distributed systems and performance tuning",
+      "Infrastructure as Code (Terraform, CDK, Pulumi)",
+      "Security and compliance fundamentals",
+      "ML/GenAI product integration experience",
+      "Cost optimization and reliability/SRE practices",
+      "Hiring/interviewing and mentoring",
+      "Startup/0→1 experience"
+    ]
+  },
   "responsibilities": [
-    "Build small demos with LLM APIs",
-    "Write evaluations and prompt libraries",
-    "Document findings and iterate quickly"
+    "Design, build, and operate core product services end-to-end",
+    "Set engineering practices (code reviews, testing, CI/CD, on-call, observability)",
+    "Collaborate with product/design to deliver customer value quickly and iteratively",
+    "Make pragmatic architecture decisions that balance speed and long-term health",
+    "Establish reliability, monitoring, and incident response norms",
+    "Ensure data, security, and privacy best practices",
+    "Mentor teammates and help define the engineering culture",
+    "Document decisions, interfaces, and runbooks"
   ],
-  "must_haves": [
-    "Python + basic data skills",
-    "Familiarity with LLM APIs / prompt engineering",
-    "Curiosity and fast learning"
+  "interview_loop": [
+    "Screen",
+    "Tech Deep-Dive",
+    "System Design",
+    "Founder Chat",
+    "References"
   ],
-  "nice_to_haves": [
-    "LangChain or LangGraph exposure",
-    "Streamlit or Flask for demos"
-  ]
+  "sourcing_tags": ["founding engineer", "startup", "full-stack", "backend", "generalist"],
+  "approved": true,
+  "version": 1
 }

@@ -46,17 +46,28 @@ Plan a startup hiring process from a single prompt.
 ```
 HiringAssistant/
 ├─ app/
-│  ├─ ui.py                              # Streamlit UI (resolve roles, show results)
+│  ├─ ui.py                              # Streamlit shell; runs graph once + renders Tabs; Tab 1 delegated
 │  ├─ __init__.py
+│  ├─ tabs/
+│  │  ├─ __init__.py
+│  │  └─ roles_tab.py                    # NEW: Tab 1 orchestration (roles & JDs) + callbacks to re-run graph
+│  ├─ components/
+│  │  ├─ __init__.py
+│  │  ├─ matched_role_editor.py          # NEW: editor for matched roles; AI suggest; apply changes; save custom template
+│  │  └─ unresolved_role_panel.py        # NEW: top-3 suggestions UI; defaults to newest custom; preview; create-new flow
+│  ├─ services/
+│  │  ├─ __init__.py
+│  │  └─ state_helpers.py                # NEW: field/set_field/_get helpers + bump_llm_usage
 │  ├─ graph/
 │  │  ├─ __init__.py
 │  │  ├─ state.py                        # AppState, RoleSpec, JD models
-│  │  ├─ nodes.py                        # intake → profile → jd → plan
+│  │  ├─ nodes.py                        # UPDATED: LLM-first intake + robust heuristic fallback; top-3 suggests; profile fill-only; JD polish
 │  │  └─ graph_builder.py                # LangGraph wiring
 │  └─ tools/
 │     ├─ __init__.py
-│     ├─ role_matcher.py                 # Extract phrases, match KB, save/load roles
-│     ├─ search_stub.py                  # load_role_template, load_template_for_role
+│     ├─ role_matcher.py                 # UPDATED: repo-root data paths; timestamped custom ids; created_at; improved extractor; top-3 matching
+│     ├─ llm_extractor.py                # NEW: optional LLM-based role extraction (strict JSON response)
+│     ├─ search_stub.py                  # UPDATED: repo-root-aware template loader (curated + custom)
 │     ├─ skill_suggester.py              # AI suggestions for must/nice skills & responsibilities
 │     ├─ checklist.py                    # Build checklist + interview loop
 │     ├─ email_writer.py                 # Outreach email templates
@@ -66,11 +77,11 @@ HiringAssistant/
 │     └─ exporters.py                    # Export JSON → DOCX
 ├─ data/
 │  ├─ roles_kb.json                      # Curated role index
-│  ├─ roles_kb_custom.json               # Custom role index (user-created)
-│  ├─ role_knowledge/                    # Curated templates
-│  │  ├─ founding_engineer.json
-│  │  └─ genai_intern.json
-│  └─ role_knowledge_custom/             # Custom templates (generated at runtime)
+│  ├─ roles_kb_custom.json               # Custom role index (now includes created_at)
+│  ├─ role_knowledge/                    # Curated templates (canonical schema: skills.{must,nice})
+│  │  ├─ founding_engineer.json          # UPDATED to canonical schema
+│  │  └─ genai_intern.json               # UPDATED to canonical schema
+│  └─ role_knowledge_custom/             # Custom templates (timestamped ids: <slug>__custom__YYYYMMDD_HHMMSS)
 ├─ exports/                              # (ignored) generated files
 ├─ logs/                                 # (ignored) usage logs
 ├─ Dockerfile
@@ -86,44 +97,49 @@ HiringAssistant/
 
 ```
 User prompt
-   ↓
-[Intake v2]
-   - Extract candidate phrases
-   - Match against roles_kb.json (+ roles_kb_custom.json)
-   - Produce RoleSpec(status="match" | "suggest" | "unknown")
-   ↓
+  ↓
+[Intake]
+  - Extract intended roles from the full prompt:
+      • LLM-first (optional, respects use_llm/llm_cap) → titles
+      • Heuristic fallback (supports 1..N roles) → titles
+  - For each title, fuzzy-match against roles_kb.json + roles_kb_custom.json
+  - Produce RoleSpec(status="suggest" | "unknown") with top-3 suggestions per role
+  ↓
 [UI Resolver]
-   - For suggest/unknown: pick a suggested template OR create a new role
-   - (Optional) ✨ AI suggest must-have / nice-to-have skills + responsibilities
-   - Save custom role → role_knowledge_custom/ + roles_kb_custom.json (when chosen)
-   - Once finalized → RoleSpec(status="match")
-   ↓
+  - For each suggested role: default-select the newest custom template if present
+  - Preview selected template (function, skills.must/nice, responsibilities)
+  - Choose a suggestion OR create a brand-new custom role
+  - (Optional) ✨ AI suggest must-have / nice-to-have skills + responsibilities
+  - Save custom role → data/role_knowledge_custom/<slug>__custom__YYYYMMDD_HHMMSS.json
+    and index in data/roles_kb_custom.json (includes created_at)
+  - Once finalized → RoleSpec(status="match")
+  ↓
 [Profile (enrich-only)]
-   - Load curated/custom JSON template for each matched role
-   - FILL ONLY MISSING FIELDS (must_haves, nice_to_haves, responsibilities, seniority, geo)
-   - Never overwrite fields already edited in UI
-   ↓
+  - Load curated/custom JSON template for each matched role
+  - FILL ONLY MISSING FIELDS (skills.must, skills.nice, responsibilities, seniority, geo)
+  - Never overwrite fields already edited in UI
+  ↓
 [JD]
-   - Build structured Job Descriptions from RoleSpec
-   - (Optional) LLM polish (strict JSON in/out; capped by llm_cap)
-   ↓
+  - Build structured Job Descriptions from RoleSpec + template facts
+  - (Optional) LLM polish (strict JSON in/out; capped by llm_cap)
+  ↓
 [Plan]
-   - Generate checklist + interview loop (Markdown + JSON)
-   - Inclusive language scan
-   - Outreach emails (only for finalized roles)
-   ↓
+  - Generate checklist + interview loop (Markdown + JSON)
+  - Inclusive language scan
+  - Outreach emails (only for finalized roles)
+  ↓
 [UI Tabs]
-   - Roles & JDs (edit matched roles; ✨ AI re-suggest; Apply changes re-runs graph)
-   - Checklist / Plan
-   - Tools (Email / Inclusive warnings / LLM usage log)
-   - Export (MD / JSON / DOCX)
-
-Notes:
-- **Apply changes** updates only the current run (session) and re-runs the graph; use “Save as custom template” to persist to disk.
-- Custom roles are stored under `data/role_knowledge_custom/` and indexed in `data/roles_kb_custom.json`.
+  - Roles & JDs (resolve roles, preview templates, edit matched roles; ✨ re-suggest; Apply changes re-runs graph)
+  - Checklist / Plan
+  - Tools (Email / Inclusive warnings / LLM usage log)
+  - Export (MD / JSON / DOCX)
 
 ```
 
+Notes:
+- **Apply changes** updates only the current run; **Save as custom template** persists to disk.
+- Custom roles are stored under `data/role_knowledge_custom/` and indexed in `data/roles_kb_custom.json`.
+- Core templates use the canonical schema (`skills.must` / `skills.nice`).
 
 ---
 

@@ -1,0 +1,53 @@
+{
+  "id": "founding_engineer__custom__20250907_005630",
+  "title": "Founding Engineer",
+  "aliases": [],
+  "function": "Engineering",
+  "seniority": "Senior",
+  "skills": {
+    "must": [
+      "Proficient in full-stack development",
+      "Experience with cloud infrastructure (AWS",
+      "GCP)",
+      "Strong knowledge of microservices architecture",
+      "Expertise in database design and management",
+      "Skilled in DevOps practices and CI/CD",
+      "Familiarity with containerization (Docker",
+      "Kubernetes)"
+    ],
+    "nice": [
+      "Experience with machine learning frameworks",
+      "Knowledge of blockchain technologies",
+      "Proficient in mobile app development",
+      "Familiarity with Agile methodologies",
+      "Experience in startup environments"
+    ]
+  },
+  "responsibilities": [
+    "Design and implement scalable software solutions",
+    "Lead technical architecture discussions",
+    "Collaborate with product and design teams",
+    "Mentor junior engineers and interns",
+    "Establish best coding practices and standards",
+    "Drive the development of new features",
+    "Troubleshoot and optimize existing systems",
+    "Participate in code reviews and feedback sessions"
+  ],
+  "interview_loop": [
+    "Screen",
+    "Tech Deep-Dive",
+    "System Design",
+    "Founder Chat",
+    "References"
+  ],
+  "sourcing_tags": [
+    "founding engineer",
+    "startup",
+    "full-stack",
+    "backend",
+    "generalist"
+  ],
+  "approved": false,
+  "version": 1,
+  "created_at": "2025-09-07T00:56:30Z"
+}
