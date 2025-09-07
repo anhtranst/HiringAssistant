@@ -11,7 +11,7 @@ from graph.state import AppState
 
 # Analytics / exports (Tabs 2–4 keep using these)
 from tools.analytics import log_event
-from tools.exporters import checklist_json_to_docx
+from tools.exporters import checklist_json_to_docx, jd_to_docx, jds_to_zip 
 
 # Tab 1 is delegated to its own module
 from tabs.roles_tab import render_roles_tab
@@ -135,13 +135,15 @@ else:
         })
 
     # ============================================================
-    # Tab 4 — Export (unchanged)
+    # Tab 4 — Export
     # ============================================================
     with t4:
+        # Pull what we rendered earlier in Tabs 1–2
         checklist_md = _get(state, "checklist_markdown", "") or ""
         checklist_js = _get(state, "checklist_json", {}) or {}
+        jds_map = _get(state, "jds", {}) or {}   # title -> JD model/dict
 
-        # Save to disk for demo (optional)
+        # (Optional) Save to disk for demo; downloads below don't require these files
         os.makedirs("exports", exist_ok=True)
         md_path = os.path.join("exports", "plan.md")
         json_path = os.path.join("exports", "plan.json")
@@ -155,27 +157,76 @@ else:
 
         st.write("Files generated in `exports/` (also downloadable here):")
 
-        # Direct downloads
+        # -------------------------------
+        # Hiring plan (Markdown / JSON)
+        # -------------------------------
         if checklist_md:
             st.download_button(
                 "Download plan.md",
                 data=checklist_md,
                 file_name="plan.md",
-                mime="text/markdown"
+                mime="text/markdown",
+                key="dl_plan_md",
             )
         if checklist_js:
             st.download_button(
                 "Download plan.json",
                 data=json.dumps(checklist_js, indent=2),
                 file_name="plan.json",
-                mime="application/json"
+                mime="application/json",
+                key="dl_plan_json",
             )
-        # DOCX download
+
+        # -------------------------------
+        # Hiring plan (DOCX)
+        #   A single document that includes:
+        #   - timeline/budget/location
+        #   - checklist + interview loop
+        #   - Roles & JDs (summary sections)
+        # -------------------------------
         if checklist_js:
             docx_bytes = checklist_json_to_docx(checklist_js)
             st.download_button(
                 "Download plan.docx",
                 data=docx_bytes,
                 file_name="plan.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                key="dl_plan_docx",
             )
+
+        # -------------------------------
+        # Per-role JD exports (DOCX)
+        #   One JD per file — standard for ATS/job boards and shareability.
+        #   We also offer a ZIP containing all JDs for convenience.
+        # -------------------------------
+        if jds_map:
+            st.markdown("### Per-role JD exports")
+
+            # Small helper for safe filenames without importing extra modules here
+            def _safe_name(s: str) -> str:
+                keep = "".join(ch for ch in (s or "role") if ch.isalnum() or ch in (" ", "-", "_", "."))
+                out = (keep.strip() or "role").replace(" ", "-")
+                return out
+
+            # Individual role downloads
+            for idx, (title, jd) in enumerate(jds_map.items()):
+                jd_bytes = jd_to_docx(jd)
+                safe = _safe_name(str(title))
+                st.download_button(
+                    f"Download JD — {title}.docx",
+                    data=jd_bytes,
+                    file_name=f"JD_{safe}.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    key=f"dl_jd_{idx}_{safe}",
+                )
+
+            # All roles as a single ZIP
+            all_zip = jds_to_zip(jds_map)
+            st.download_button(
+                "Download all JDs (.zip)",
+                data=all_zip,
+                file_name="JDs.zip",
+                mime="application/zip",
+                key="dl_jds_zip",
+            )
+

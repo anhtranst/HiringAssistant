@@ -106,16 +106,16 @@ User prompt
   - Produce RoleSpec(status="suggest" | "unknown") with top-3 suggestions per role
   ↓
 [UI Resolver]
-  - For each suggested role: default-select the newest custom template if present
-  - Choose from a dropdown (stable indices); preview updates immediately on selection
-  - Exclude templates that are already chosen in other slots (no duplicate picks)
+  - For each suggested role: default-select newest custom template if present
+  - Exclude templates already chosen in other slots (no duplicate picks)
+  - Choose from a dropdown (stable indices); preview updates live
+  - Preview includes: Mission, Function, Seniority, Must/Nice, Responsibilities
   - “Use selected suggestion” marks the role as matched:
-      • Sets confidence=None and confidence_source="manual" (shows as “Selected by HR”)
+      • Sets confidence=None and confidence_source="manual" (“Selected by HR”)
   - Or create a brand-new custom role:
-      • ✨ AI can suggest skills/responsibilities (respects LLM cap)
-      • Saving a custom role marks it matched with confidence=None, confidence_source="manual"
-      • Persists to data/role_knowledge_custom/<slug>__custom__YYYYMMDD_HHMMSS.json
-        and indexes in data/roles_kb_custom.json (includes created_at)
+      • Fields: Title, Function, Seniority, Mission, Must/Nice, Responsibilities
+      • ✨ Suggest with AI (context-aware): polish current drafts or generate from scratch (respects LLM cap)
+      • Save → persists to data/role_knowledge_custom/<slug>__custom__YYYYMMDD_HHMMSS.json and indexes in data/roles_kb_custom.json (created_at)
   - Once finalized → RoleSpec(status="match")
   ↓
 [Profile (enrich-only)]
@@ -124,28 +124,31 @@ User prompt
   - Never overwrite fields already edited in UI
   ↓
 [JD]
-  - Build structured Job Descriptions from RoleSpec + template facts
+  - Build structured Job Descriptions per matched role (includes role-specific Mission)
   - (Optional) LLM polish (strict JSON in/out; capped by llm_cap)
   ↓
 [Plan]
-  - Generate checklist + interview loop (Markdown + JSON)
+  - Generate checklist + interview loop (Markdown + JSON) using timeline_weeks, budget_usd, location_policy, and role/JD context
   - Inclusive language scan
   - Outreach emails (only for finalized roles)
   ↓
 [UI Tabs]
-  - Roles & JDs (resolve roles with dropdown, live preview; de-dupe selections; edit matched roles; ✨ re-suggest; Apply changes re-runs graph)
+  - Roles & JDs (resolve roles with dropdown, live preview; de-dupe selections; edit matched roles; ✨ context-aware re-suggest; Apply changes re-runs graph)
   - Checklist / Plan
-  - Tools (Email / Inclusive warnings / LLM usage log)
-  - Export (MD / JSON / DOCX)
-
+  - Tools (Inclusive warnings / Outreach email examples / LLM usage log)
+  - Export:
+      • Hiring Plan → MD / JSON / DOCX (timeline/budget/location, checklist, loop, role summaries)
+      • Per-role JDs → one DOCX per role
+      • All JDs → ZIP
 ```
 
 Notes:
-- **Apply changes** updates only the current run; **Save as custom template** persists to disk.
-- Custom roles are stored under `data/role_knowledge_custom/` and indexed in `data/roles_kb_custom.json`.
-- Core templates use the canonical schema (`skills.must` / `skills.nice`).
+- Apply changes updates only the current run; Save as custom template persists to disk.
+- Custom roles are stored under data/role_knowledge_custom/ and indexed in data/roles_kb_custom.json.
+- All AI features respect use_llm/llm_cap and log usage in global_constraints.llm_log.
 
 ---
+
 
 ## Local Setup
 
