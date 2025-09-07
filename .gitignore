@@ -49,5 +49,4 @@ logs/*
 !.elasticbeanstalk/*.global.yml
 
 # custom roles
-data/roles_kb_custom.json
 data/role_knowledge_custom/*.json

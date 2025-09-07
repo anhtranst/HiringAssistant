@@ -1,42 +1,57 @@
 {
-  "id": "founding_engineer",
-  "title": "Founding Engineer",
-  "aliases": ["Founding Software Engineer", "First Engineer", "Early Software Engineer", "Founding Full-Stack Engineer"],
+  "id": "genai_intern",
+  "title": "GenAI Intern",
+  "aliases": [
+    "Generative AI Intern",
+    "AI Builder Intern",
+    "LLM Intern",
+    "AI Research Intern"
+  ],
   "function": "Engineering",
   "seniority": "Intern",
+  "mission": "As our GenAI Intern, you will work closely with the product and engineering teams to prototype, test, and refine AI-driven features, gaining hands-on experience with large language models and applied machine learning in a fast-moving startup environment.",
   "skills": {
     "must": [
-      "Strong software engineering fundamentals"
+      "Familiarity with Python programming",
+      "Understanding of machine learning fundamentals",
+      "Basic knowledge of large language models (LLMs) or transformers",
+      "Experience with at least one ML/AI library (e.g., PyTorch, TensorFlow, Hugging Face)",
+      "Ability to run experiments and analyze results",
+      "Strong problem-solving and debugging skills",
+      "Good communication and collaboration skills"
     ],
     "nice": [
-      "Frontend experience (React/TypeScript)",
-      "Distributed systems and performance tuning",
-      "Infrastructure as Code (Terraform, CDK, Pulumi)",
-      "Security and compliance fundamentals",
-      "ML/GenAI product integration experience",
-      "Cost optimization and reliability/SRE practices",
-      "Hiring/interviewing and mentoring",
-      "Startup/0→1 experience"
+      "Previous internship or project experience in AI/ML",
+      "Knowledge of prompt engineering and fine-tuning techniques",
+      "Familiarity with APIs and web application development",
+      "Basic cloud experience (AWS, GCP, or Azure)",
+      "Interest in human-computer interaction and product design",
+      "Coursework or research experience in NLP, CV, or GenAI"
     ]
   },
   "responsibilities": [
-    "Design, build, and operate core product services end-to-end",
-    "Set engineering practices (code reviews, testing, CI/CD, on-call, observability)",
-    "Collaborate with product/design to deliver customer value quickly and iteratively",
-    "Make pragmatic architecture decisions that balance speed and long-term health",
-    "Establish reliability, monitoring, and incident response norms",
-    "Ensure data, security, and privacy best practices",
-    "Mentor teammates and help define the engineering culture",
-    "Document decisions, interfaces, and runbooks"
+    "Support the design and testing of AI-powered product features",
+    "Run small-scale experiments with LLMs and report findings",
+    "Assist in building prototypes and demos for internal and customer use",
+    "Document learnings, results, and best practices",
+    "Collaborate with engineers and designers to align AI features with user needs",
+    "Contribute to research on new techniques in generative AI and machine learning"
   ],
   "interview_loop": [
     "Screen",
-    "Tech Deep-Dive",
-    "System Design",
-    "Founder Chat",
+    "Technical/Project Discussion",
+    "Coding/Problem-Solving Exercise",
+    "Team/Founder Chat",
     "References"
   ],
-  "sourcing_tags": ["founding engineer", "startup", "full-stack", "backend", "generalist"],
+  "sourcing_tags": [
+    "genai intern",
+    "ai intern",
+    "ml intern",
+    "llm intern",
+    "student",
+    "new graduate"
+  ],
   "approved": true,
   "version": 1
 }

@@ -1,9 +1,15 @@
 {
   "id": "founding_engineer",
   "title": "Founding Engineer",
-  "aliases": ["Founding Software Engineer", "First Engineer", "Early Software Engineer", "Founding Full-Stack Engineer"],
+  "aliases": [
+    "Founding Software Engineer",
+    "First Engineer",
+    "Early Software Engineer",
+    "Founding Full-Stack Engineer"
+  ],
   "function": "Engineering",
   "seniority": "Senior",
+  "mission": "As our Founding Engineer, you will help us move from prototype to production, building reliable core services and setting the engineering culture.",
   "skills": {
     "must": [
       "Strong software engineering fundamentals",
@@ -45,7 +51,13 @@
     "Founder Chat",
     "References"
   ],
-  "sourcing_tags": ["founding engineer", "startup", "full-stack", "backend", "generalist"],
+  "sourcing_tags": [
+    "founding engineer",
+    "startup",
+    "full-stack",
+    "backend",
+    "generalist"
+  ],
   "approved": true,
-  "version": 1
+  "version": 2
 }
